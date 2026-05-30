@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/app.dart';
+import 'package:atpl_flashing_app/app.dart';
 
 class AtomURLType {
   static const String LOCAL = "LOCAL";

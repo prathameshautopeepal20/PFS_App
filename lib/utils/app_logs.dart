@@ -1,7 +1,7 @@
 // ignore_for_file: constant_identifier_names
 
 import 'package:logger/logger.dart';
-import 'package:cp_tmtl_sensor_zig/app.dart';
+import 'package:atpl_flashing_app/app.dart';
 
 class AppLogTag {
   static const String INFO = 'ℹ️️NFO️';

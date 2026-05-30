@@ -1,4 +1,4 @@
-// import 'package:cp_tmtl_sensor_zig/models/auth_user_data_model.dart';
+// import 'package:atpl_flashing_app/models/auth_user_data_model.dart';
 
 // final AuthService oauthService = new AuthService();
 

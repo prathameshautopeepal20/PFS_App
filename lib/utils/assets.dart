@@ -34,7 +34,7 @@ class Assets {
   static const String fav = "asset/logo/images/fav.svg";
 
   static const String download = "asset/logo/images/download.svg";
-  static const String profileHeadercp_tmtl_sensor_zigLogo =
+  static const String profileHeaderatpl_flashing_appLogo =
       "asset/logo/images/profileHeaderImg.svg";
   static const String annousementLogo = "asset/logo/images/annousmentlogo.png";
   static const String share = "asset/logo/images/share.svg";

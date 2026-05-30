@@ -46,7 +46,7 @@ class UsbDiscoveryService {
         
        final discovered = UsbDiscoveredDevice(
   name: device.productName ?? "Unknown VCI",
-  manufacturer: device.manufacturerName ?? "cp_tmtl_sensor_zig",
+  manufacturer: device.manufacturerName ?? "atpl_flashing_app",
   deviceId: device.deviceId!, // Assuming deviceId is never null here
   vid: device.vid ?? 0,       // Fix: Provide default if null
   pid: device.pid ?? 0,       // Fix: Provide default if null

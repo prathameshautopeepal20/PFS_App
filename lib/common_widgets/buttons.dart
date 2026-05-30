@@ -1,9 +1,9 @@
-import 'package:cp_tmtl_sensor_zig/common_widgets/text_field.dart';
-import 'package:cp_tmtl_sensor_zig/services/connectivity/connectivity_service.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_constants.dart';
-import 'package:cp_tmtl_sensor_zig/utils/sizes.dart';
+import 'package:atpl_flashing_app/common_widgets/text_field.dart';
+import 'package:atpl_flashing_app/services/connectivity/connectivity_service.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/utils/app_constants.dart';
+import 'package:atpl_flashing_app/utils/sizes.dart';
 import 'package:connectivity_wrapper/connectivity_wrapper.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';

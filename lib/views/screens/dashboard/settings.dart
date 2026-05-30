@@ -1,6 +1,6 @@
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/settingsController.dart'; // Ensure PLCController is here
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
-import 'package:cp_tmtl_sensor_zig/views/screens/dashboard/mainLayoutScreen.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/settingsController.dart'; // Ensure PLCController is here
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/mainLayoutScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';

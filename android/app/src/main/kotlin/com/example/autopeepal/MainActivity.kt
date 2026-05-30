@@ -1,4 +1,4 @@
-package com.example.cp_tmtl_sensor_zig
+package com.example.atpl_flashing_app
 
 import android.content.Context
 import android.net.wifi.WifiManager

@@ -1,9 +1,9 @@
 // ignore_for_file: deprecated_member_use
 
-import 'package:cp_tmtl_sensor_zig/api/app_api.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/ui_helper_widgets.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-import 'package:cp_tmtl_sensor_zig/utils/extension/extension/map_extensions.dart';
+import 'package:atpl_flashing_app/api/app_api.dart';
+import 'package:atpl_flashing_app/common_widgets/ui_helper_widgets.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
+import 'package:atpl_flashing_app/utils/extension/extension/map_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:io' show Platform;

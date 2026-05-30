@@ -1,12 +1,12 @@
 import 'package:get/get.dart';
-import 'package:cp_tmtl_sensor_zig/api/api_status_code.dart';
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/api/response_model.dart';
-import 'package:cp_tmtl_sensor_zig/services/local_storage_services/local_storages_string.dart';
-import 'package:cp_tmtl_sensor_zig/services/local_storage_services/localstorage_services.dart';
-import 'package:cp_tmtl_sensor_zig/utils/keys/api_keys.dart';
-import 'package:cp_tmtl_sensor_zig/utils/strings.dart';
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper.dart/app_snack_bar.dart';
+import 'package:atpl_flashing_app/api/api_status_code.dart';
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/api/response_model.dart';
+import 'package:atpl_flashing_app/services/local_storage_services/local_storages_string.dart';
+import 'package:atpl_flashing_app/services/local_storage_services/localstorage_services.dart';
+import 'package:atpl_flashing_app/utils/keys/api_keys.dart';
+import 'package:atpl_flashing_app/utils/strings.dart';
+import 'package:atpl_flashing_app/utils/ui_helper.dart/app_snack_bar.dart';
 
 class ApiService extends GetConnect {
 

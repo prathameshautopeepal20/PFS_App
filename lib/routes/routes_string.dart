@@ -30,9 +30,13 @@ class Routes {
   static const gdZoomImage = '/gdZoomImage';
   static const testingScreen = '/testingScreen';
   static const testRecipeScreen = '/testRecipeScreen';
+  static const vehicalescreen = '/vehicaleScreen';
+ static const datasyncscreen = '/datasyncScreen';
+
   static const recipeAdditionScreen = '/recipeAdditionScreen';
   static const recipeAdditionReadOnlyScreen = '/recipeAdditionReadOnlyScreen';
   static const settingsScreen = '/settingsScreen';
   static const sensorAnalysis = '/sensorAnalysis';
-    
+
+  static String get batchflashingscreen => null;
 }

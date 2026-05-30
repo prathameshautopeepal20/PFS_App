@@ -1,5 +1,5 @@
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/app.dart';
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/app.dart';
 
 void main() async {
   App.instance.initAndRunApp(

@@ -20,7 +20,7 @@
     "km_covered": 15,
     "complaints": "test",
     "created_by": {
-      "email": "dipak.yogi@cp_tmtl_sensor_zig.com",
+      "email": "dipak.yogi@atpl_flashing_app.com",
       "workshop": null,
       "role": null
     },
@@ -47,7 +47,7 @@
         },
         "device": 4782,
         "user": {
-          "email": "dipak.yogi@cp_tmtl_sensor_zig.com",
+          "email": "dipak.yogi@atpl_flashing_app.com",
           "workshop": null,
           "role": null
         },

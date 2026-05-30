@@ -1,9 +1,9 @@
-import 'package:cp_tmtl_sensor_zig/common_widgets/background_widget.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/text_field.dart';
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/dasboardController.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
-import 'package:cp_tmtl_sensor_zig/utils/sizes.dart';
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper_widgets.dart';
+import 'package:atpl_flashing_app/common_widgets/background_widget.dart';
+import 'package:atpl_flashing_app/common_widgets/text_field.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/utils/sizes.dart';
+import 'package:atpl_flashing_app/utils/ui_helper_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';

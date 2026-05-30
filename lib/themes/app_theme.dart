@@ -2,9 +2,9 @@ library theme;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_bar_theme.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-import 'package:cp_tmtl_sensor_zig/themes/color_scheme.dart';
+import 'package:atpl_flashing_app/themes/app_bar_theme.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
+import 'package:atpl_flashing_app/themes/color_scheme.dart';
 export '../utils/assets.dart';
 export 'app_colors.dart';
 

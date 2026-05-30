@@ -1,9 +1,9 @@
 // // import 'dart:io';
-// // import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-// // import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/dasboardController.dart';
-// // import 'package:cp_tmtl_sensor_zig/logic/controller/dataSyncController.dart';
-// // import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-// // import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
+// // import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+// // import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
+// // import 'package:atpl_flashing_app/logic/controller/dataSyncController.dart';
+// // import 'package:atpl_flashing_app/routes/routes_string.dart';
+// // import 'package:atpl_flashing_app/themes/app_colors.dart';
 // // import 'package:flutter/material.dart';
 // // import 'package:get/get.dart';
 // // import 'package:path_provider/path_provider.dart';
@@ -104,11 +104,11 @@
 // //   Widget buildDivider() => Divider(color: Colors.grey.shade300, height: 1, indent: 20, endIndent: 20);
 // // }
 
-// import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/dasboardController.dart';
+// import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
 // import 'package:flutter/material.dart';
 // import 'package:get/get.dart';
-// import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-// import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
+// import 'package:atpl_flashing_app/routes/routes_string.dart';
+// import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
 
 // class CustomDrawer extends StatelessWidget {
 //   CustomDrawer({Key? key}) : super(key: key);
@@ -284,11 +284,11 @@
 //     }
 //   }
 // }
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/dasboardController.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
+import 'package:atpl_flashing_app/routes/routes_string.dart';
+import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
 
 class CustomDrawer extends StatelessWidget {
   CustomDrawer({Key? key}) : super(key: key);
@@ -304,6 +304,8 @@ class CustomDrawer extends StatelessWidget {
             color: Colors.white,
             border: Border(right: BorderSide(color: Colors.grey.shade300)),
           ),
+
+          
           child: Column(
             children: [
               _buildHeader(),
@@ -316,18 +318,27 @@ class CustomDrawer extends StatelessWidget {
                         Routes.dashboardScreen),
                     _buildSidebarDivider(),
 
-                    _buildSidebarTile(Icons.assignment_turned_in_outlined,
-                        "Testing", Routes.testingScreen),
+                    _buildSidebarTile(Icons.layers_outlined,"Batch Flashing",
+                        Routes.testingScreen),
                     _buildSidebarDivider(),
 
-                    _buildSidebarTile(Icons.laptop_windows_outlined, "Recipe",
+                    _buildSidebarTile(Icons.flash_on_outlined, "Individual Flashing",
                         Routes.testRecipeScreen),
                     _buildSidebarDivider(),
+                    
+                    _buildSidebarTile(Icons.directions_car_outlined, "Vehicle Flashing",
+                        Routes.vehicalescreen),
+                    _buildSidebarDivider(),
+
+                    _buildSidebarTile(Icons.sync_outlined, "Data Sync",
+                        Routes.datasyncscreen),
+                    _buildSidebarDivider(),
+
 
                     // --- SETTINGS SECTION WITH SUB-MENU ---
-                    _buildSettingsSection(),
+                    // _buildSettingsSection(),
 
-                    _buildSidebarDivider(),
+                    // _buildSidebarDivider(),
 
                     // Logout Option
                     _buildSidebarTile(
@@ -351,14 +362,14 @@ class CustomDrawer extends StatelessWidget {
         // If collapsed, show a simple icon that opens a small menu or expands the drawer
         return IconButton(
           icon: Icon(Icons.settings_outlined,
-              color: Colors.blue.shade600, size: iconSize),
+              color: Colors.orange.shade600, size: iconSize),
           onPressed: () => isExpanded.value = true,
         );
       }
 
       return ExpansionTile(
         leading: Icon(Icons.settings_outlined,
-            color: Colors.blue.shade600, size: iconSize),
+            color: Colors.orange.shade600, size: iconSize),
         title: Text(
           "Settings",
           style: TextStyle(
@@ -367,7 +378,7 @@ class CustomDrawer extends StatelessWidget {
             color: Colors.black87,
           ),
         ),
-        iconColor: Colors.blue.shade600,
+        iconColor: Colors.orange.shade600,
         collapsedIconColor: Colors.grey,
         childrenPadding: const EdgeInsets.only(left: 20), // Indent sub-items
         children: [
@@ -383,7 +394,7 @@ class CustomDrawer extends StatelessWidget {
   Widget _buildSubTile(IconData icon, String title, String route) {
     return ListTile(
       visualDensity: VisualDensity.compact,
-      leading: Icon(icon, color: Colors.blue.shade400, size: 25),
+      leading: Icon(icon, color: Colors.orange.shade400, size: 25),
       title: Text(
         title,
         style: const TextStyle(
@@ -431,7 +442,7 @@ class CustomDrawer extends StatelessWidget {
     return Container(
       height: 120,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.blue.shade600,
+      color: const Color(0xFFF9772C),
       child: Row(
         mainAxisAlignment: isExpanded.value
             ? MainAxisAlignment.spaceBetween
@@ -447,7 +458,7 @@ class CustomDrawer extends StatelessWidget {
                 children: [
                   Center(
                     child: Image.asset(
-                      'assets/new/tmtl-logo(1).png',
+                      'assets/new/autopeepal.png',
                       height: 75, // Adjust as needed
                       fit: BoxFit.contain,
                     ),
@@ -457,7 +468,7 @@ class CustomDrawer extends StatelessWidget {
                   ),
                   Center(
                     child: const Text(
-                      "CP-TMTL",
+                      "ATPL-PFS",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -496,7 +507,7 @@ class CustomDrawer extends StatelessWidget {
             width: double.infinity,
             alignment: Alignment.center,
             child: Icon(icon,
-                color: isLogout ? Colors.red.shade400 : Colors.blue.shade600,
+                color: isLogout ? Colors.red.shade400 : Colors.orange.shade600,
                 size: iconSize),
           ),
         );
@@ -507,7 +518,7 @@ class CustomDrawer extends StatelessWidget {
         horizontalTitleGap: 16,
         contentPadding: const EdgeInsets.symmetric(horizontal: 24),
         leading: Icon(icon,
-            color: isLogout ? Colors.red.shade400 : Colors.blue.shade600,
+            color: isLogout ? Colors.red.shade400 : Colors.orange.shade600,
             size: iconSize),
         title: Text(
           title,
@@ -544,7 +555,7 @@ class CustomDrawer extends StatelessWidget {
                                 fontWeight: FontWeight.w500)),
                       ],
                     )
-                  : const Text("v1.0",
+                  : const Text("v1.1",
                       style: TextStyle(fontSize: 10, color: Colors.grey)),
             ),
           ),

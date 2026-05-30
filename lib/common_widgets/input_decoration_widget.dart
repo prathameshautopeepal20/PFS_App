@@ -1,5 +1,5 @@
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_constants.dart';
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/utils/app_constants.dart';
 import 'package:flutter/material.dart';
 
 

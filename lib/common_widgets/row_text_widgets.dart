@@ -1,6 +1,6 @@
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper_widgets.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/utils/ui_helper_widgets.dart';
 import 'package:flutter/material.dart';
 
 class BillingRow extends StatelessWidget {

@@ -5,7 +5,7 @@
 // import 'package:http/http.dart' as http;
 // import 'package:package_info_plus/package_info_plus.dart';
 
-// import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
+// import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
 
 // class DashboardController extends GetxController {
 //   // =====================================================
@@ -256,9 +256,9 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-import 'package:cp_tmtl_sensor_zig/api/dev/dev_service.dart';
-import 'package:cp_tmtl_sensor_zig/services/log_file.dart';
+import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+import 'package:atpl_flashing_app/api/dev/dev_service.dart';
+import 'package:atpl_flashing_app/services/log_file.dart';
 
 class DashboardController extends GetxController {
   // =====================================================

@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'dart:math';
-import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
+import 'package:atpl_flashing_app/utils/app_logs.dart';
 import 'package:crossplat_objectid/crossplat_objectid.dart'
     as crossplat_objectid;
 import 'package:flutter/cupertino.dart';

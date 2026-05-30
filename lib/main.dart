@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/app.dart';
-import 'package:cp_tmtl_sensor_zig/services/log_file.dart'; // ✅ FIXED PATH
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/app.dart';
+import 'package:atpl_flashing_app/services/log_file.dart'; // ✅ FIXED PATH
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-import 'package:cp_tmtl_sensor_zig/api/dev/methods.dart';
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/api/dev/dev_service.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
-import 'package:cp_tmtl_sensor_zig/utils/extension/extension/map_extensions.dart';
-import 'package:cp_tmtl_sensor_zig/utils/keys/api_keys.dart';
-import 'package:cp_tmtl_sensor_zig/utils/strings.dart';
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper.dart/app_tost.dart';
+import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+import 'package:atpl_flashing_app/api/dev/methods.dart';
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/api/dev/dev_service.dart';
+import 'package:atpl_flashing_app/utils/app_logs.dart';
+import 'package:atpl_flashing_app/utils/extension/extension/map_extensions.dart';
+import 'package:atpl_flashing_app/utils/keys/api_keys.dart';
+import 'package:atpl_flashing_app/utils/strings.dart';
+import 'package:atpl_flashing_app/utils/ui_helper.dart/app_tost.dart';
 import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 

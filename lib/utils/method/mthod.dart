@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper.dart/app_tost.dart';
+import 'package:atpl_flashing_app/utils/ui_helper.dart/app_tost.dart';
 import 'package:flutter/services.dart';
 
 class Methods {

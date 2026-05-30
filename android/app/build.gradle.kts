@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cp_tmtl_sensor_zig"
+    namespace = "com.example.atpl_flashing_app"
     compileSdk = 36
 
     compileOptions {
@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.cp_tmtl_sensor_zig"
+        applicationId = "com.example.atpl_flashing_app"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = 1

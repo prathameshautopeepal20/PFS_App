@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
+import 'package:atpl_flashing_app/utils/app_logs.dart';
 
 ///[ErrorHandlerService] which  logs any exception occurred at run time
 ///

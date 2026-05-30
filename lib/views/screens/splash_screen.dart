@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/logic/controller/splashController.dart';
+import 'package:atpl_flashing_app/logic/controller/splashController.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -10,11 +10,11 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF003377),
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
       body: Center(
         child: Image.asset(
-         'assets/new/tmtl-logo(1).png', // your image path
-          width: 200, // adjust size if needed
+         'assets/new/autopeepal(1).png', // your image path
+          width: 400, // adjust size if needed
           fit: BoxFit.contain,
         ),
       ),

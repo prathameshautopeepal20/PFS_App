@@ -1,7 +1,7 @@
 
-// import 'package:cp_tmtl_sensor_zigApp/utils/app_constants.dart';
-import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_constants.dart';
+// import 'package:atpl_flashing_appApp/utils/app_constants.dart';
+import 'package:atpl_flashing_app/routes/routes_string.dart';
+import 'package:atpl_flashing_app/utils/app_constants.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 

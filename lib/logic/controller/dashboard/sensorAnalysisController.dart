@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart';
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/settingsController.dart';
+import 'package:atpl_flashing_app/common_widgets/popup.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/settingsController.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

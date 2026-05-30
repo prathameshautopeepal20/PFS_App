@@ -1,5 +1,5 @@
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/testRecipeController.dart';
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/testingController.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/testRecipeController.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/testingController.dart';
 import 'package:get/get.dart';
 
 

@@ -1,10 +1,10 @@
-// import 'package:cp_tmtl_sensor_zig/common_widgets/customDropdown.dart';
-// import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart';
-// import 'package:cp_tmtl_sensor_zig/common_widgets/ui_helper_widgets.dart';
-// import 'package:cp_tmtl_sensor_zig/logic/controller/auth/registerController.dart';
-// import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-// import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-// import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
+// import 'package:atpl_flashing_app/common_widgets/customDropdown.dart';
+// import 'package:atpl_flashing_app/common_widgets/popup.dart';
+// import 'package:atpl_flashing_app/common_widgets/ui_helper_widgets.dart';
+// import 'package:atpl_flashing_app/logic/controller/auth/registerController.dart';
+// import 'package:atpl_flashing_app/routes/routes_string.dart';
+// import 'package:atpl_flashing_app/themes/app_colors.dart';
+// import 'package:atpl_flashing_app/themes/app_textstyles.dart';
 // import 'package:flutter/material.dart';
 // import 'package:get/get.dart';
 

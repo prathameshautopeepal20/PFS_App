@@ -86,7 +86,7 @@ Building Windows application...
 Nuget.exe not found, trying to download or use cached version.
 Nuget.exe not found, trying to download or use cached version.
 Building Windows application...                                    78.3s
-ΓêÜ Built build\windows\x64\runner\Debug\cp_tmtl_sensor_zig.exe
+ΓêÜ Built build\windows\x64\runner\Debug\atpl_flashing_app.exe
 Γ£à Step 1: WidgetsFlutterBinding initialized
 Γ£à Step 2: WindowManager initialized
 Γ£à Step 3: Window shown and maximized

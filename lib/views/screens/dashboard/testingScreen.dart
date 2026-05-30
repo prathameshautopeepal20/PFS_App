@@ -1,5 +1,5 @@
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/testingController.dart';
-import 'package:cp_tmtl_sensor_zig/views/screens/dashboard/mainLayoutScreen.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/testingController.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/mainLayoutScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

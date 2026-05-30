@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
 
-import 'package:cp_tmtl_sensor_zig/utils/usb_web_stub.dart' as html;
+import 'package:atpl_flashing_app/utils/usb_web_stub.dart' as html;
 class UsbDiscoveryServiceWeb {
   final StreamController<UsbDiscoveredDevice> _discoveredStreamController = StreamController.broadcast();
   Stream<UsbDiscoveredDevice> get discoveredDevices => _discoveredStreamController.stream;

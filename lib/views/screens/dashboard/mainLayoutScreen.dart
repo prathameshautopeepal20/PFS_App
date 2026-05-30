@@ -122,9 +122,9 @@
 //     );
 //   }
 // }
-import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart';
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/settingsController.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/custom_drawer.dart';
+import 'package:atpl_flashing_app/common_widgets/custom_drawer.dart';
+import 'package:atpl_flashing_app/common_widgets/popup.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/settingsController.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -238,46 +238,46 @@ class MainLayout extends StatelessWidget {
   void _showQuickConnect(PLCController controller) {
     controller.loadSettings();
 
-    Get.dialog(
-      Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 450,
-          padding: const EdgeInsets.all(30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.settings_input_component,
-                      color: Color(0xFF0055BB), size: 28),
-                  SizedBox(width: 15),
-                  Text("PLC Quick Connection",
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const Divider(height: 40),
+    // Get.dialog(
+    //   Dialog(
+    //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    //     child: Container(
+    //       width: 450,
+    //       padding: const EdgeInsets.all(30),
+    //       child: Column(
+    //         mainAxisSize: MainAxisSize.min,
+    //         children: [
+    //           const Row(
+    //             children: [
+    //               Icon(Icons.settings_input_component,
+    //                   color: Color(0xFF0055BB), size: 28),
+    //               SizedBox(width: 15),
+    //               Text("PLC Quick Connection",
+    //                   style:
+    //                       TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+    //             ],
+    //           ),
+    //           const Divider(height: 40),
 
-              // --- EDITABLE IP ADDRESS FIELD ---
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text("Edit Target IP Address",
-                    style: TextStyle(
-                        color: Colors.blueGrey, fontWeight: FontWeight.w500)),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: controller.ipController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  hintText: "e.g. 192.168.1.10",
-                ),
-              ),
+    //           // --- EDITABLE IP ADDRESS FIELD ---
+    //           const Align(
+    //             alignment: Alignment.centerLeft,
+    //             child: Text("Edit Target IP Address",
+    //                 style: TextStyle(
+    //                     color: Colors.blueGrey, fontWeight: FontWeight.w500)),
+    //           ),
+    //           const SizedBox(height: 10),
+    //           TextFormField(
+    //             controller: controller.ipController,
+    //             keyboardType: TextInputType.number,
+    //             decoration: InputDecoration(
+    //               filled: true,
+    //               fillColor: Colors.grey[100],
+    //               border: OutlineInputBorder(
+    //                   borderRadius: BorderRadius.circular(8)),
+    //               hintText: "e.g. 192.168.1.10",
+    //             ),
+    //           ),
 
               // const Align(
               //   alignment: Alignment.centerLeft,
@@ -301,88 +301,88 @@ class MainLayout extends StatelessWidget {
 
               // Note: Port is kept invisible but exists in controller.portController.text
 
-              const SizedBox(height: 30),
-              const Text(
-                "Ensure the PLC is reachable on the local network before attempting to connect.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-              const SizedBox(height: 40),
+    //           const SizedBox(height: 30),
+    //           const Text(
+    //             "Ensure the PLC is reachable on the local network before attempting to connect.",
+    //             textAlign: TextAlign.center,
+    //             style: TextStyle(color: Colors.grey, fontSize: 13),
+    //           ),
+    //           const SizedBox(height: 40),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Get.back(),
-                    child: const Text("Cancel",
-                        style: TextStyle(color: Colors.grey)),
-                  ),
-                  const SizedBox(width: 15),
-                  Obx(() => ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0055BB),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 30, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8))),
-                        onPressed: controller.isConnecting.value
-                            ? null
-                            : () async {
-                                // 1. Attempt connection
-                                await controller.connectToPLC(
-                                    controller.ipController.text,
-                                     // 🔥 hardcoded port
-                                    );
+    //           Row(
+    //             mainAxisAlignment: MainAxisAlignment.end,
+    //             children: [
+    //               TextButton(
+    //                 onPressed: () => Get.back(),
+    //                 child: const Text("Cancel",
+    //                     style: TextStyle(color: Colors.grey)),
+    //               ),
+    //               const SizedBox(width: 15),
+    //               Obx(() => ElevatedButton(
+    //                     style: ElevatedButton.styleFrom(
+    //                         backgroundColor: const Color(0xFF0055BB),
+    //                         foregroundColor: Colors.white,
+    //                         padding: const EdgeInsets.symmetric(
+    //                             horizontal: 30, vertical: 15),
+    //                         shape: RoundedRectangleBorder(
+    //                             borderRadius: BorderRadius.circular(8))),
+    //                     onPressed: controller.isConnecting.value
+    //                         ? null
+    //                         : () async {
+    //                             // 1. Attempt connection
+    //                             await controller.connectToPLC(
+    //                                 controller.ipController.text,
+    //                                  // 🔥 hardcoded port
+    //                                 );
 
-                                // 2. Handle Outcome
-                                if (controller.isConnected.value) {
-                                  // Success: Close the settings/connect dialog
-                                  Get.back();
-                                  Get.dialog(
-                                    CustomPopup(
-                                      title: "Connected",
-                                      message:
-                                          " Established connection to ${controller.ipController.text}",
-                                       // Uses that red accent we discussed
-                                      confirmText: "Okay",
-                                      onConfirm: () => Get
-                                          .back(), // Closes popup to let them try again
-                                    ),
-                                    barrierDismissible: false,
-                                  );
-                                } else {
-                                  // Failure: Show the Windows-friendly CustomPopup
-                                  Get.dialog(
-                                    CustomPopup(
-                                      title: "Connection Failed",
-                                      message:
-                                          "Unable to reach the PLC at ${controller.ipController.text}. "
-                                          "Please verify the IP address and ensure the hardware is powered on.",
-                                      isError:
-                                          true, // Uses that red accent we discussed
-                                      confirmText: "Retry",
-                                      onConfirm: () => Get
-                                          .back(), // Closes popup to let them try again
-                                    ),
-                                    barrierDismissible: false,
-                                  );
-                                }
-                              },
-                        child: controller.isConnecting.value
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : const Text("Connect Device"),
-                      )),
-                ],
-              )
-            ],
-          ),
-        ),
-      ),
-    );
+    //                             // 2. Handle Outcome
+    //                             if (controller.isConnected.value) {
+    //                               // Success: Close the settings/connect dialog
+    //                               Get.back();
+    //                               Get.dialog(
+    //                                 CustomPopup(
+    //                                   title: "Connected",
+    //                                   message:
+    //                                       " Established connection to ${controller.ipController.text}",
+    //                                    // Uses that red accent we discussed
+    //                                   confirmText: "Okay",
+    //                                   onConfirm: () => Get
+    //                                       .back(), // Closes popup to let them try again
+    //                                 ),
+    //                                 barrierDismissible: false,
+    //                               );
+    //                             } else {
+    //                               // Failure: Show the Windows-friendly CustomPopup
+    //                               Get.dialog(
+    //                                 CustomPopup(
+    //                                   title: "Connection Failed",
+    //                                   message:
+    //                                       "Unable to reach the PLC at ${controller.ipController.text}. "
+    //                                       "Please verify the IP address and ensure the hardware is powered on.",
+    //                                   isError:
+    //                                       true, // Uses that red accent we discussed
+    //                                   confirmText: "Retry",
+    //                                   onConfirm: () => Get
+    //                                       .back(), // Closes popup to let them try again
+    //                                 ),
+    //                                 barrierDismissible: false,
+    //                               );
+    //                             }
+    //                           },
+    //                     child: controller.isConnecting.value
+    //                         ? const SizedBox(
+    //                             width: 20,
+    //                             height: 20,
+    //                             child: CircularProgressIndicator(
+    //                                 strokeWidth: 2, color: Colors.white))
+    //                         : const Text("Connect Device"),
+    //                   )),
+    //             ],
+    //           )
+    //         ],
+    //       ),
+    //     ),
+    //   ),
+    // );
   }
 }

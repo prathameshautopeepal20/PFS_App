@@ -3,7 +3,7 @@ class AppAssets {
   static const String imagePath = 'assets/new/';
 
   static const String logo = '${svgPath}logo.svg';
-  static const String cp_tmtl_sensor_zig= '${svgPath}cp_tmtl_sensor_zig.svg';
+  static const String atpl_flashing_app= '${svgPath}atpl_flashing_app.svg';
   static const String lightIcon = '${svgPath}light.svg';
   static const String harnessLogo = '${svgPath}harness_logo.svg';
   static const String eyeIcon = '${svgPath}eye.svg';

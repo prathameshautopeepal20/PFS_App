@@ -1,5 +1,5 @@
-import 'package:cp_tmtl_sensor_zig/common_widgets/ui_helper_widgets.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
+import 'package:atpl_flashing_app/common_widgets/ui_helper_widgets.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

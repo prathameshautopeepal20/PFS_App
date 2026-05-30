@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cp_tmtl_sensor_zig/utils/assets.dart';
-import 'package:cp_tmtl_sensor_zig/utils/sizes.dart';
+import 'package:atpl_flashing_app/utils/assets.dart';
+import 'package:atpl_flashing_app/utils/sizes.dart';
 ///[AppErrorWidget] an Custom Error widget
 ///
 ///Only If [App.instance.devMode] is enabled error details are shown

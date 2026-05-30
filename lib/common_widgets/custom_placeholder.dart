@@ -1,9 +1,9 @@
-import 'package:cp_tmtl_sensor_zig/common_widgets/button.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/custom_app_bar.dart';
-import 'package:cp_tmtl_sensor_zig/utils/assets.dart';
-import 'package:cp_tmtl_sensor_zig/utils/sizes.dart';
-import 'package:cp_tmtl_sensor_zig/utils/strings.dart';
-import 'package:cp_tmtl_sensor_zig/utils/ui_helper_widgets.dart';
+import 'package:atpl_flashing_app/common_widgets/button.dart';
+import 'package:atpl_flashing_app/common_widgets/custom_app_bar.dart';
+import 'package:atpl_flashing_app/utils/assets.dart';
+import 'package:atpl_flashing_app/utils/sizes.dart';
+import 'package:atpl_flashing_app/utils/strings.dart';
+import 'package:atpl_flashing_app/utils/ui_helper_widgets.dart';
 import 'package:flutter/material.dart';
 
 

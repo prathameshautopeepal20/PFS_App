@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/utils/constants/breakpoints.dart';
+import 'package:atpl_flashing_app/utils/constants/breakpoints.dart';
 import 'package:flutter/material.dart';
 
 import 'constants/device_type.dart';

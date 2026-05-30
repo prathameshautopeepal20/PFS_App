@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/themes/app_theme.dart';
+import 'package:atpl_flashing_app/themes/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class LoaderWrapper extends StatelessWidget {

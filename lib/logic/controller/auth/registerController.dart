@@ -1,11 +1,11 @@
 // import 'dart:convert';
 
-// import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart' show CustomPopup;
-// import 'package:cp_tmtl_sensor_zig/models/oem_model.dart';
-// import 'package:cp_tmtl_sensor_zig/models/signIn_model.dart';
-// import 'package:cp_tmtl_sensor_zig/models/workshopGroup_model.dart';
-// import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-// import 'package:cp_tmtl_sensor_zig/services/api_services.dart';
+// import 'package:atpl_flashing_app/common_widgets/popup.dart' show CustomPopup;
+// import 'package:atpl_flashing_app/models/oem_model.dart';
+// import 'package:atpl_flashing_app/models/signIn_model.dart';
+// import 'package:atpl_flashing_app/models/workshopGroup_model.dart';
+// import 'package:atpl_flashing_app/routes/routes_string.dart';
+// import 'package:atpl_flashing_app/services/api_services.dart';
 // import 'package:get/get.dart';
 
 // class RegistrationController extends GetxController {

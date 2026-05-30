@@ -1,6 +1,6 @@
-import 'package:cp_tmtl_sensor_zig/app.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
-import 'package:cp_tmtl_sensor_zig/utils/strings.dart';
+import 'package:atpl_flashing_app/app.dart';
+import 'package:atpl_flashing_app/utils/app_logs.dart';
+import 'package:atpl_flashing_app/utils/strings.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get_core/get_core.dart';
 import 'package:get/get_navigation/get_navigation.dart';

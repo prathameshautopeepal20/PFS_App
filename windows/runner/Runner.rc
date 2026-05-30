@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "cp_tmtl_sensor_zig" "\0"
+            VALUE "FileDescription", "atpl_flashing_app" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "cp_tmtl_sensor_zig" "\0"
+            VALUE "InternalName", "atpl_flashing_app" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "cp_tmtl_sensor_zig.exe" "\0"
-            VALUE "ProductName", "cp_tmtl_sensor_zig" "\0"
+            VALUE "OriginalFilename", "atpl_flashing_app.exe" "\0"
+            VALUE "ProductName", "atpl_flashing_app" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

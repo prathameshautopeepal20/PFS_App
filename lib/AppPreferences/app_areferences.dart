@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:cp_tmtl_sensor_zig/models/receipe_model.dart';
+import 'package:atpl_flashing_app/models/receipe_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppPreferences {

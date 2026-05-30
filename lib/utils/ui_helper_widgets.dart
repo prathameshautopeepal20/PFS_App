@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cp_tmtl_sensor_zig/utils/sizes.dart';
+import 'package:atpl_flashing_app/utils/sizes.dart';
 
 ///UI helper widgets for custom space
 

@@ -1,7 +1,7 @@
 // import 'dart:convert';
 // import 'dart:io';
-// import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart';
-// import 'package:cp_tmtl_sensor_zig/models/receipe_model.dart';
+// import 'package:atpl_flashing_app/common_widgets/popup.dart';
+// import 'package:atpl_flashing_app/models/receipe_model.dart';
 // import 'package:file_picker/file_picker.dart';
 // import 'package:get/get.dart';
 
@@ -100,9 +100,9 @@
 // }
 import 'dart:convert';
 import 'dart:io';
-import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/popup.dart';
-import 'package:cp_tmtl_sensor_zig/models/receipe_model.dart';
+import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+import 'package:atpl_flashing_app/common_widgets/popup.dart';
+import 'package:atpl_flashing_app/models/receipe_model.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get/get.dart';
 

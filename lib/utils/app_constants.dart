@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
 
 // final List<String> defaultList = [Strings.select];
 

@@ -1,4 +1,4 @@
-import 'package:cp_tmtl_sensor_zig/themes/app_textstyles.dart';
+import 'package:atpl_flashing_app/themes/app_textstyles.dart';
 import 'package:flutter/material.dart';
 
 class TextFieldLableWidget extends StatelessWidget {

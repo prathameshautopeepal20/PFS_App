@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:usb_serial/usb_serial.dart';
-import 'package:cp_tmtl_sensor_zig/services/mdns_command_helper.dart';
+import 'package:atpl_flashing_app/services/mdns_command_helper.dart';
 
 class UsbSerialService {
   final UsbDevice device;

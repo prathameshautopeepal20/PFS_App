@@ -1,15 +1,15 @@
 // import 'dart:async';
 // import 'dart:io';
-// import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-// import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-// import 'package:cp_tmtl_sensor_zig/common_widgets/app_error_widget.dart';
-// import 'package:cp_tmtl_sensor_zig/logic/bindings/initial_bindings.dart';
+// import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+// import 'package:atpl_flashing_app/api/app_envirments.dart';
+// import 'package:atpl_flashing_app/common_widgets/app_error_widget.dart';
+// import 'package:atpl_flashing_app/logic/bindings/initial_bindings.dart';
 
-// import 'package:cp_tmtl_sensor_zig/routes/routes.dart';
-// import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-// import 'package:cp_tmtl_sensor_zig/services/error_handler/error_handler_service.dart';
-// import 'package:cp_tmtl_sensor_zig/themes/app_theme.dart';
-// import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
+// import 'package:atpl_flashing_app/routes/routes.dart';
+// import 'package:atpl_flashing_app/routes/routes_string.dart';
+// import 'package:atpl_flashing_app/services/error_handler/error_handler_service.dart';
+// import 'package:atpl_flashing_app/themes/app_theme.dart';
+// import 'package:atpl_flashing_app/utils/app_logs.dart';
 
 // import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
@@ -19,7 +19,7 @@
 
 // class App {
 //   static App instance = App();
-//   static const MethodChannel platform = MethodChannel('cp_tmtl_sensor_zig/native');
+//   static const MethodChannel platform = MethodChannel('atpl_flashing_app/native');
 
 //   /// [_appName] app display Named
 //   ///
@@ -235,30 +235,30 @@
 // }
 import 'dart:async';
 import 'dart:io';
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/common_widgets/app_error_widget.dart';
-import 'package:cp_tmtl_sensor_zig/logic/bindings/initial_bindings.dart';
-import 'package:cp_tmtl_sensor_zig/routes/routes.dart';
-import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
-import 'package:cp_tmtl_sensor_zig/services/error_handler/error_handler_service.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_theme.dart';
-import 'package:cp_tmtl_sensor_zig/utils/app_logs.dart';
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/common_widgets/app_error_widget.dart';
+import 'package:atpl_flashing_app/logic/bindings/initial_bindings.dart';
+import 'package:atpl_flashing_app/routes/routes.dart';
+import 'package:atpl_flashing_app/routes/routes_string.dart';
+import 'package:atpl_flashing_app/services/error_handler/error_handler_service.dart';
+import 'package:atpl_flashing_app/themes/app_theme.dart';
+import 'package:atpl_flashing_app/utils/app_logs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get_navigation/src/root/get_material_app.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:window_manager/window_manager.dart';
 // ignore: unused_import
-import 'package:cp_tmtl_sensor_zig/services/log_file.dart';
+import 'package:atpl_flashing_app/services/log_file.dart';
 
 class App {
   static App instance = App();
 
   // Only use platform channel on mobile
   static const MethodChannel platform =
-      MethodChannel('cp_tmtl_sensor_zig/native');
+      MethodChannel('atpl_flashing_app/native');
 
-  final String _appName = 'CP TMTL Sensor Zig';
+  final String _appName = 'ATPM PGS';
   static String jwtToken = '';
   static String connectedVia = '';
   static int oemId = 0;
@@ -306,7 +306,7 @@ class App {
 
           const WindowOptions windowOptions = WindowOptions(
             center: true,
-            title: "CP TMTL Sensor Zig",
+            title: "ATPL PFS ",
             titleBarStyle: TitleBarStyle.normal,
             size: Size(1280, 720),
             minimumSize: Size(800, 600),

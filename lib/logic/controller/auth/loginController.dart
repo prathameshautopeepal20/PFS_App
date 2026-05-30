@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:cp_tmtl_sensor_zig/AppPreferences/app_areferences.dart';
-import 'package:cp_tmtl_sensor_zig/api/app_envirments.dart';
-import 'package:cp_tmtl_sensor_zig/api/app_urls.dart';
-import 'package:cp_tmtl_sensor_zig/api/dev/dev_service.dart';
-import 'package:cp_tmtl_sensor_zig/logic/controller/dashboard/testRecipeController.dart';
-import 'package:cp_tmtl_sensor_zig/routes/routes_string.dart';
+import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
+import 'package:atpl_flashing_app/api/app_envirments.dart';
+import 'package:atpl_flashing_app/api/app_urls.dart';
+import 'package:atpl_flashing_app/api/dev/dev_service.dart';
+import 'package:atpl_flashing_app/logic/controller/dashboard/testRecipeController.dart';
+import 'package:atpl_flashing_app/routes/routes_string.dart';
 import 'package:flutter/material.dart';
-import 'package:cp_tmtl_sensor_zig/services/log_file.dart';
+import 'package:atpl_flashing_app/services/log_file.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 

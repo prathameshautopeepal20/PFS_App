@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'package:cp_tmtl_sensor_zig/api/app_api.dart';
-import 'package:cp_tmtl_sensor_zig/services/app_setting_services.dart';
-import 'package:cp_tmtl_sensor_zig/themes/app_colors.dart';
-import 'package:cp_tmtl_sensor_zig/utils/extension/app_extensions.dart';
+import 'package:atpl_flashing_app/api/app_api.dart';
+import 'package:atpl_flashing_app/services/app_setting_services.dart';
+import 'package:atpl_flashing_app/themes/app_colors.dart';
+import 'package:atpl_flashing_app/utils/extension/app_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
