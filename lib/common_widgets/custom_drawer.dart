@@ -285,6 +285,7 @@
 //   }
 // }
 import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/batch_flashing_popup.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/routes/routes_string.dart';
@@ -304,8 +305,6 @@ class CustomDrawer extends StatelessWidget {
             color: Colors.white,
             border: Border(right: BorderSide(color: Colors.grey.shade300)),
           ),
-
-          
           child: Column(
             children: [
               _buildHeader(),
@@ -318,22 +317,44 @@ class CustomDrawer extends StatelessWidget {
                         Routes.dashboardScreen),
                     _buildSidebarDivider(),
 
-                    _buildSidebarTile(Icons.layers_outlined,"Batch Flashing",
-                        Routes.testingScreen),
+                    ListTile(
+                      leading: Icon(
+                        Icons.layers_outlined,
+                        color: Colors.orange.shade600,
+                      ),
+                      title: const Text(
+                        "Batch Flashing",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onTap: () async {
+                        final result = await showDialog(
+                          context: Get.context!,
+                          barrierDismissible: false,
+                          builder: (context) => const BatchFlashingPopup(),
+                        );
+
+                        if (result != null) {
+                          Get.toNamed(
+                            Routes.batchFlashingScreen,
+                            arguments: result,
+                          );
+                        }
+                      },
+                    ),
+
+                    _buildSidebarTile(Icons.flash_on_outlined,
+                        "Individual Flashing", Routes.testRecipeScreen),
                     _buildSidebarDivider(),
 
-                    _buildSidebarTile(Icons.flash_on_outlined, "Individual Flashing",
-                        Routes.testRecipeScreen),
-                    _buildSidebarDivider(),
-                    
-                    _buildSidebarTile(Icons.directions_car_outlined, "Vehicle Flashing",
-                        Routes.vehicalescreen),
+                    _buildSidebarTile(Icons.directions_car_outlined,
+                        "Vehicle Flashing", Routes.vehicalescreen),
                     _buildSidebarDivider(),
 
                     _buildSidebarTile(Icons.sync_outlined, "Data Sync",
                         Routes.datasyncscreen),
                     _buildSidebarDivider(),
-
 
                     // --- SETTINGS SECTION WITH SUB-MENU ---
                     // _buildSettingsSection(),

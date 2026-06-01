@@ -37,6 +37,9 @@ class Routes {
   static const recipeAdditionReadOnlyScreen = '/recipeAdditionReadOnlyScreen';
   static const settingsScreen = '/settingsScreen';
   static const sensorAnalysis = '/sensorAnalysis';
+  static const batchFlashingScreen = "/batchFlashingScreen";
 
-  static String get batchflashingscreen => null;
+  //static String get batchFlashingScreen => null;
+
+  //static String get batchflashingscreen => null;
 }
