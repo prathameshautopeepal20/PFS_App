@@ -227,4 +227,6 @@ static Future<void> clearCredentials() async {
       "port": portInt.toString(), // Returns string for your UI/Controllers
     };
   }
+
+  static Future<void> setUserRole(String value) async {}
 }

@@ -30,7 +30,7 @@ class Routes {
   static const gdZoomImage = '/gdZoomImage';
   static const testingScreen = '/testingScreen';
   static const testRecipeScreen = '/testRecipeScreen';
-  static const vehicalescreen = '/vehicaleScreen';
+  static const vehicalescreen = '/vechicle_flashing_screen';
  static const datasyncscreen = '/datasyncScreen';
 
   static const recipeAdditionScreen = '/recipeAdditionScreen';

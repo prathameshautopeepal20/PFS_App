@@ -1,471 +1,335 @@
-import 'package:atpl_flashing_app/logic/controller/auth/loginController.dart';
-import 'package:atpl_flashing_app/themes/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:atpl_flashing_app/logic/controller/auth/loginController.dart';
 
 class LoginScreen extends GetView<LoginController> {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    Get.lazyPut(() => LoginController());
-
-    final Size screenSize = MediaQuery.of(context).size;
-    final bool isDesktop = screenSize.width > 900;
-
-    const Color primaryOrange = Color(0xFFF9772C);
-    const Color textDark = Color(0xFF1E293B);
-    const Color textLight = Color(0xFF64748B);
-    const Color formBg = Color(0xFFF8FAFC);
+    final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Row(
-        children: [
-          // ================= LEFT SIDE =================
-
-          if (isDesktop)
-            Expanded(
-              flex: 5,
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFF9772C),
-                      Color(0xFFE56717),
-                      Color(0xFFCC5A0F),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: -100,
-                      left: -100,
-                      child: Container(
-                        width: 300,
-                        height: 300,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          shape: BoxShape.circle,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF1E293B),
+              Color(0xFF0F172A),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            width: isDesktop ? 1000 : double.infinity,
+            margin: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: Colors.white.withOpacity(0.05),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 30,
+                )
+              ],
+            ),
+            child: Row(
+              children: [
+                // ================= LEFT PANEL =================
+                // ================= LEFT PANEL =================
+                if (isDesktop)
+                  Expanded(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(24),
+                          bottomLeft: Radius.circular(24),
+                        ),
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFFF97316),
+                            Color(0xFFEA580C),
+                            Color(0xFF9A3412),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
                       ),
-                    ),
-
-                    Positioned(
-                      bottom: -120,
-                      right: -120,
-                      child: Container(
-                        width: 350,
-                        height: 350,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40),
+                      child: Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Image.asset(
-                              'assets/new/autopeepal.png',
-                              height: 140,
-                              errorBuilder:
-                                  (context, error, stackTrace) =>
-                                      const Icon(
-                                Icons.settings_suggest,
-                                size: 120,
+                            // ================= LOGO =================
+                            Container(
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                // color: Colors.white.withOpacity(0.15),
+                                // shape: BoxShape.circle,
+                              ),
+                              child: Image.asset(
+                                "assets/new/autopeepal.png",
+                                height: 150,
+                                width: 300,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.flash_on,
+                                    size: 80,
+                                    color: Colors.white,
+                                  );
+                                },
+                              ),
+                            ),
+
+                            const SizedBox(height: 25),
+
+                            const Text(
+                              "ATPL FLASHING",
+                              style: TextStyle(
                                 color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            Text(
+                              "Vehicle ECU Flashing System",
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
                               ),
                             ),
 
                             const SizedBox(height: 30),
 
-                            const Text(
-                              "ATPL FLASHING",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            Text(
-                              "Precision • Performance • Diagnostics",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.white.withOpacity(0.85),
-                                fontWeight: FontWeight.w300,
-                                letterSpacing: 1,
-                              ),
-                            ),
-
-                            const SizedBox(height: 40),
-
+                            // Optional highlight card
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 16,
-                              ),
+                                  horizontal: 20, vertical: 10),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: const Text(
+                                "Secure • Fast • Reliable",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.flash_on_rounded,
-                                    color: Colors.white,
-                                    size: 26,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    "Enterprise Vehicle Flashing Platform",
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withOpacity(0.95),
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            )
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
 
-          // ================= RIGHT SIDE =================
+                // ================= RIGHT PANEL =================
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(30),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 20),
 
-          Expanded(
-            flex: 5,
-            child: Container(
-              color: formBg,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    padding: const EdgeInsets.all(40),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.96),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 40,
-                          spreadRadius: 4,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // MOBILE LOGO
+                          const Text(
+                            "Welcome Back",
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
 
-                        if (!isDesktop) ...[
-                          Center(
-                            child: Image.asset(
-                              'assets/new/autopeepal.png',
-                              height: 80,
-                              errorBuilder:
-                                  (context, error, stackTrace) =>
-                                      const Icon(
-                                Icons.settings_suggest,
-                                size: 60,
-                                color: primaryOrange,
+                          const SizedBox(height: 5),
+
+                          Text(
+                            "Login to continue",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                            ),
+                          ),
+
+                          const SizedBox(height: 25),
+
+                          // ================= SERVER STATUS =================
+                          Obx(() => Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: controller.serverColor.value,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.circle,
+                                        size: 12,
+                                        color: controller.serverColor.value),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      controller.serverStatus.value,
+                                      style:
+                                          const TextStyle(color: Colors.white),
+                                    )
+                                  ],
+                                ),
+                              )),
+
+                          const SizedBox(height: 25),
+
+                          // ================= USERNAME =================
+                          _buildInput(
+                            controller.usernameController,
+                            "Username",
+                            Icons.person,
+                          ),
+
+                          const SizedBox(height: 15),
+
+                          // ================= PASSWORD =================
+                          Obx(
+                            () => _buildInput(
+                              controller.passwordController,
+                              "Password",
+                              Icons.lock,
+                              obscure: controller.hidePassword.value,
+                              suffix: IconButton(
+                                icon: Icon(
+                                  controller.hidePassword.value
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.white70,
+                                ),
+                                onPressed: controller.hidePassword.toggle,
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 15),
+
+                          // ================= ROLE =================
+                          Obx(
+                            () => Container(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: _boxStyle(),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: controller.selectedRole.value,
+                                  dropdownColor: const Color(0xFF1E293B),
+                                  iconEnabledColor: Colors.white,
+                                  style: const TextStyle(color: Colors.white),
+                                  items: controller.roles
+                                      .map((e) => DropdownMenuItem(
+                                            value: e,
+                                            child: Text(e),
+                                          ))
+                                      .toList(),
+                                  onChanged: (v) =>
+                                      controller.selectedRole.value = v!,
+                                ),
+                              ),
+                            ),
+                          ),
+
                           const SizedBox(height: 30),
-                        ],
 
-                        const Text(
-                          "Welcome Back",
-                          style: TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w900,
-                            color: textDark,
-                          ),
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        const Text(
-                          "Login to continue accessing the flashing platform",
-                          style: TextStyle(
-                            color: textLight,
-                            fontSize: 16,
-                            height: 1.5,
-                          ),
-                        ),
-
-                        const SizedBox(height: 45),
-
-                        // ================= USERNAME =================
-
-                        _buildLabel("USERNAME OR EMAIL"),
-
-                        Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: TextField(
-                            controller: controller.usernameController,
-                            cursorColor: primaryOrange,
-                            style: const TextStyle(fontSize: 15),
-                            decoration: _inputDecoration(
-                              'name@company.com',
-                              Icons.alternate_email_rounded,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 28),
-
-                        // ================= PASSWORD =================
-
-                        _buildLabel("PASSWORD"),
-
-                        Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Obx(
-                            () => TextField(
-                              controller:
-                                  controller.passwordController,
-                              obscureText:
-                                  controller.hidePassword.value,
-                              cursorColor: primaryOrange,
-                              style:
-                                  const TextStyle(fontSize: 15),
-                              decoration: _inputDecoration(
-                                '••••••••',
-                                Icons.lock_outline_rounded,
-                              ).copyWith(
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    controller.hidePassword.value
-                                        ? Icons.visibility_off_rounded
-                                        : Icons.visibility_rounded,
-                                    size: 20,
-                                    color: textLight,
+                          // ================= LOGIN BUTTON =================
+                          Obx(
+                            () => SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFF97316),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
-                                  onPressed: () => controller
-                                      .hidePassword
-                                      .toggle(),
                                 ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 18),
-
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              "Forgot password?",
-                              style: TextStyle(
-                                color: primaryOrange,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 35),
-
-                        // ================= LOGIN BUTTON =================
-
-                        Obx(
-                          () => ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryOrange,
-                              foregroundColor: Colors.white,
-                              minimumSize:
-                                  const Size(double.infinity, 58),
-                              elevation: 8,
-                              shadowColor:
-                                  primaryOrange.withOpacity(0.4),
-                              shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(16),
-                              ),
-                            ),
-                            onPressed:
-                                controller.isLoading.value
+                                onPressed: controller.isLoading.value
                                     ? null
-                                    : () => controller.login(),
-                            child: controller.isLoading.value
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child:
-                                        CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 3,
-                                    ),
-                                  )
-                                : const Text(
-                                    "SIGN IN",
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight:
-                                          FontWeight.w800,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
+                                    : controller.login,
+                                child: controller.isLoading.value
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white,
+                                      )
+                                    : const Text(
+                                        "LOGIN",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                              ),
+                            ),
                           ),
-                        ),
 
-                        const SizedBox(height: 40),
+                          const SizedBox(height: 20),
 
-                        // ================= FOOTER =================
-
-                        Center(
-                          child: Column(
-                            children: const [
-                              Divider(),
-
-                              SizedBox(height: 20),
-
-                              Text(
-                                "PFS",
-                                style: TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1,
-                                  color: textDark,
-                                ),
-                              ),
-
-                              SizedBox(height: 8),
-
-                              Text(
-                                "Powered By",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-
-                              SizedBox(height: 8),
-
-                              Text(
-                                "autopeepal",
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: primaryOrange,
-                                ),
-                              ),
-                            ],
+                          const Text(
+                            "⚠ Device must be approved by admin",
+                            style:
+                                TextStyle(color: Colors.white38, fontSize: 12),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF94A3B8),
-          fontSize: 11,
-          letterSpacing: 1.3,
         ),
       ),
     );
   }
 
-  static InputDecoration _inputDecoration(
+  // ================= INPUT DESIGN =================
+  Widget _buildInput(
+    TextEditingController controller,
     String hint,
-    IconData icon,
-  ) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(
-        color: Color(0xFFCBD5E1),
-        fontSize: 15,
-      ),
-      prefixIcon: Icon(
-        icon,
-        size: 20,
-        color: const Color(0xFF94A3B8),
-      ),
-      filled: true,
-      fillColor: const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 20,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(
-          color: AppColors.primaryColor,
-          width: 2,
+    IconData icon, {
+    bool obscure = false,
+    Widget? suffix,
+  }) {
+    return Container(
+      decoration: _boxStyle(),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white54),
+          prefixIcon: Icon(icon, color: Colors.white70),
+          suffixIcon: suffix,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.all(16),
         ),
       ),
+    );
+  }
+
+  // ================= BOX STYLE =================
+  BoxDecoration _boxStyle() {
+    return BoxDecoration(
+      color: Colors.white.withOpacity(0.06),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.white.withOpacity(0.12)),
     );
   }
 }

@@ -7,9 +7,9 @@ class AtomURLType {
 }
 
 class AppEnvironment {
-  static const String _localUrl = "http://139.59.76.174:8080/api/v1/";
-  static const String _devUrl = 'http://139.59.76.174:8080/api/v1/';
-  static const String _prodUrl = 'http://139.59.76.174:8080/api/v1/';
+  static const String _localUrl = "http://139.59.25.139/api/v1/";
+  static const String _devUrl = 'http://139.59.25.139/api/v1/';
+  static const String _prodUrl = 'http://139.59.25.139/api/v1/';
 
   static bool get baseProdInstance {
     if (baseUrl == _prodUrl) {
@@ -29,6 +29,6 @@ class AppEnvironment {
         return _localUrl;
     }
 
-    return "http://139.59.76.174:8080/api/v1/";
+    return "http://139.59.25.139/api/v1/";
   }
 }
