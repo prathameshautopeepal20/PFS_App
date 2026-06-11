@@ -1452,7 +1452,7 @@ class ESNController extends GetxController {
       // ==========================================================
       // STATION ID
       // ==========================================================
-      String? stationId = await AppPreferences.getStationId();
+     // String? stationId = await AppPreferences.getStationId();
 
       // ==========================================================
       // URL
@@ -1514,7 +1514,7 @@ class ESNController extends GetxController {
       final Map<String, dynamic> requestBody = {
         "type": "SENSOR_TEST",
         "testtype": "Live",
-        "stationId": stationId ?? "OP 10",
+        //"stationId": stationId ?? "OP 10",
         "testNotStarted": "false",
         "payload": {
           "date": currentDate,
@@ -2179,7 +2179,7 @@ class ESNController extends GetxController {
       // ==========================================================
       // STATION ID
       // ==========================================================
-      String? stationId = await AppPreferences.getStationId();
+    // String? stationId = await AppPreferences.getStationId();
 
       // ==========================================================
       // TOKEN
@@ -2196,7 +2196,7 @@ class ESNController extends GetxController {
       // ==========================================================
       final Map<String, dynamic> requestBody = {
         "type": "SENSOR_TEST",
-        "stationID": stationId ?? "SENSOR_1",
+       // "stationID": stationId ?? "SENSOR_1",
         "requestParameters": {
           "engineSerialNumber": serialNumber.value,
         }

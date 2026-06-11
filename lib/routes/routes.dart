@@ -4,6 +4,8 @@ import 'package:atpl_flashing_app/logic/bindings/login_bindings.dart';
 import 'package:atpl_flashing_app/logic/bindings/testing_bindings.dart';
 import 'package:atpl_flashing_app/views/screens/auth/login.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/dashboard.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/home_page_screen.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/individual_flash_screen.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/recipeAdditionScreen.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/recipeAdditionScreenReadOnly.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/sensorAnalysis.dart';
@@ -53,17 +55,25 @@ class AppRoutes {
     //   name: Routes.settingsScreen,
     //   page: () => SettingsScreen(),
     // ),
-     GetPage(
+    GetPage(
       name: Routes.recipeAdditionReadOnlyScreen,
       page: () => RecipeAdditionReadOnly(),
     ),
-     
-     GetPage(
-      name: Routes.flashingScreen,
-      page: () =>  FlashProcessScreen(),
 
-      
+    GetPage(
+      name: Routes.flashingScreen,
+      page: () => FlashProcessScreen(),
     ),
+
+    GetPage(
+      name: '/home-page',
+      page: () => const HomePageScreen(), // ← add const here
+    ),
+    GetPage(
+      name: '/individual-flash',
+      page: () => const IndividualFlashScreen(),
+    ),
+    
     // GetPage(
     //   name: Routes.registerScreen,
     //   binding: RegisterBindings(),

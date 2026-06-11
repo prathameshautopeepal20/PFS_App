@@ -37,6 +37,8 @@ class Routes {
   static const settingsScreen = '/settingsScreen';
   static const sensorAnalysis = '/sensorAnalysis';
   static const batchFlashingScreen = "/batchFlashingScreen";
+  static const homePageScreen = "/homePageScreen";
+  static const mainScreen = '/mainScreen';
 
   //static String get batchFlashingScreen => null;
 

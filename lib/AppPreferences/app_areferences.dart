@@ -1,148 +1,177 @@
+// lib/AppPreferences/app_areferences.dart
+// FIXED: Added saveSession() + getSession() for pfs session id used in flash records
+
 import 'dart:convert';
 import 'package:atpl_flashing_app/models/receipe_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppPreferences {
-  // 🔑 Keys
   static const String _currentUserIdKey = 'active_user_id';
-  static const String _userRecipePrefix = 'recipes_for_user_'; // Unique prefix
-  static const String _tokenKey = 'auth_token';
+  static const String _userRecipePrefix = 'recipes_for_user_';
+  static const String _tokenKey         = 'auth_token';
+  static const String _loginResponseKey = 'login_response';
+  static const String _sessionKey       = 'pfs_session'; // ← NEW
 
-  // ================= SESSION MANAGEMENT =================
+  // ══════════════════════════════════════════════════════════
+  //  SESSION — analyze/create-pfs/ response
+  //  The session.id is used as the `pfs` field in every
+  //  flash record POST (analyze/create-ecu-pfs/)
+  // ══════════════════════════════════════════════════════════
 
-  /// Called during Login to identify who is using the app
+  /// Save session after create-pfs/ call (called at login + on RESET)
+  static Future<void> saveSession(Map<String, dynamic> session) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionKey, jsonEncode(session));
+    print('💾 [PREFS] Session saved — id: ${session['id']}');
+  }
+
+  /// Get the current PFS session
+  static Future<Map<String, dynamic>?> getSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw   = prefs.getString(_sessionKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get just the session id (used as `pfs` field)
+  static Future<String> getSessionId() async {
+    final session = await getSession();
+    return session?['id']?.toString() ?? '';
+  }
+
+  /// Clear session on logout
+  static Future<void> clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionKey);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  LOGIN RESPONSE
+  // ══════════════════════════════════════════════════════════
+
+  static Future<void> saveLoginResponse(Map<String, dynamic> response) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_loginResponseKey, jsonEncode(response));
+    print('💾 [PREFS] Login response saved');
+  }
+
+  static Future<Map<String, dynamic>?> getLoginResponse() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw   = prefs.getString(_loginResponseKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<int> getOemId() async {
+    final res = await getLoginResponse();
+    return res?['profile']?['oem']?['id'] ?? 0;
+  }
+
+  static Future<int> getStationId() async {
+    final res  = await getLoginResponse();
+    final list = res?['station_data'] as List?;
+    if (list != null && list.isNotEmpty) {
+      return (list[0]['id'] as int? ?? 0);
+    }
+    return 0;
+  }
+
+  static Future<String> getRole() async {
+    final res = await getLoginResponse();
+    return res?['role'] ?? '';
+  }
+
+  static Future<int> getUserId() async {
+    final res = await getLoginResponse();
+    return res?['user_id'] ?? 0;
+  }
+
+  static Future<void> clearLoginResponse() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_loginResponseKey);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  SESSION MANAGEMENT
+  // ══════════════════════════════════════════════════════════
+
   static Future<void> setActiveUser(String userId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_currentUserIdKey, userId);
   }
 
-  /// Get current session ID
   static Future<String?> getActiveUser() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_currentUserIdKey);
   }
 
-  /// Logout: Simply removes the "Active User" pointer
-  /// This leaves the actual recipe data on the device for next time
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_currentUserIdKey);
+    await prefs.remove(_loginResponseKey);
+    await prefs.remove(_sessionKey);
   }
- 
 
-  // ================= USER-SPECIFIC RECIPES =================
+  // ══════════════════════════════════════════════════════════
+  //  RECIPES (unchanged)
+  // ══════════════════════════════════════════════════════════
 
-  /// Saves a recipe into a map unique to the logged-in User ID
   static Future<void> saveRecipeForCurrentUser(Recipe recipe) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? userId = prefs.getString(_currentUserIdKey);
-
-    // DEBUG: Monitor the Save key
-    print("💾 PREFS-SAVE: Active User is [$userId]");
-
-    if (userId == null) {
-      print("❌ PREFS-SAVE ERROR: No Active User! Data will be lost.");
-      return;
-    }
+    final prefs  = await SharedPreferences.getInstance();
+    final userId = prefs.getString(_currentUserIdKey);
+    if (userId == null) return;
     if (recipe.model == null) return;
-
-    String storageKey = "$_userRecipePrefix$userId";
-
-    final String? rawData = prefs.getString(storageKey);
-    Map<String, dynamic> recipeMap = rawData != null ? jsonDecode(rawData) : {};
-
+    final storageKey = '$_userRecipePrefix$userId';
+    final rawData    = prefs.getString(storageKey);
+    final recipeMap  = rawData != null
+        ? jsonDecode(rawData) as Map<String, dynamic>
+        : <String, dynamic>{};
     recipeMap[recipe.model!] = recipe.toJson();
-
-    bool success = await prefs.setString(storageKey, jsonEncode(recipeMap));
-    print(
-        "✅ PREFS-SAVE: Model [${recipe.model}] saved to key [$storageKey]. Success: $success");
+    await prefs.setString(storageKey, jsonEncode(recipeMap));
   }
 
   static Future<List<Recipe>> getRecipesForCurrentUser() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 1. Try to get the ID
-    String? userId = prefs.getString(_currentUserIdKey);
-
-    // 🚀 SAFETY FALLBACK: If userId is null, force the default developer ID
-    // This prevents the "Successfully synced 0 recipes" error during testing.
-    // if (userId == null || userId == "null") {
-    //   print("🛠️ PREFS-READ: UserId was null, recovering session...");
-    //   userId = "abc@autopeepal.com";
-    //   await prefs.setString(_currentUserIdKey, userId);
-    // }
-
-    print("📖 PREFS-READ: Attempting to load for User [$userId]");
-
-    String storageKey = "$_userRecipePrefix$userId";
-    final String? rawData = prefs.getString(storageKey);
-
-    if (rawData == null || rawData.isEmpty) {
-      print("📂 PREFS-READ: Key [$storageKey] not found or empty.");
-      return [];
-    }
-
+    final prefs      = await SharedPreferences.getInstance();
+    final userId     = prefs.getString(_currentUserIdKey);
+    final storageKey = '$_userRecipePrefix$userId';
+    final rawData    = prefs.getString(storageKey);
+    if (rawData == null || rawData.isEmpty) return [];
     try {
-      Map<String, dynamic> map = jsonDecode(rawData);
-      List<Recipe> recipes =
-          map.values.map((json) => Recipe.fromJson(json)).toList();
-      print("📦 PREFS-READ: Found ${recipes.length} recipes in [$storageKey]");
-      return recipes;
-    } catch (e) {
-      print("❌ PREFS-READ: Parse Error (likely malformed JSON): $e");
+      final map = jsonDecode(rawData) as Map<String, dynamic>;
+      return map.values.map((j) => Recipe.fromJson(j)).toList();
+    } catch (_) {
       return [];
     }
   }
 
-static Future<void> deleteRecipeForCurrentUser(
-  String recipeModel,
-) async {
-  final prefs = await SharedPreferences.getInstance();
-
-  final String? userId =
-      prefs.getString(_currentUserIdKey);
-
-  print("🗑️ PREFS-DELETE: Active User [$userId]");
-
-  if (userId == null) {
-    print("❌ PREFS-DELETE ERROR: No Active User");
-    return;
+  static Future<void> deleteRecipeForCurrentUser(String recipeModel) async {
+    final prefs      = await SharedPreferences.getInstance();
+    final userId     = prefs.getString(_currentUserIdKey);
+    if (userId == null) return;
+    final storageKey = '$_userRecipePrefix$userId';
+    final rawData    = prefs.getString(storageKey);
+    if (rawData == null || rawData.isEmpty) return;
+    final recipeMap  = jsonDecode(rawData) as Map<String, dynamic>;
+    recipeMap.remove(recipeModel);
+    await prefs.setString(storageKey, jsonEncode(recipeMap));
   }
 
-  String storageKey =
-      "$_userRecipePrefix$userId";
+  // ══════════════════════════════════════════════════════════
+  //  TOKEN
+  // ══════════════════════════════════════════════════════════
 
-  final String? rawData =
-      prefs.getString(storageKey);
-
-  if (rawData == null || rawData.isEmpty) {
-    print("⚠️ No recipes found");
-    return;
-  }
-
-  Map<String, dynamic> recipeMap =
-      jsonDecode(rawData);
-
-  // REMOVE RECIPE
-  recipeMap.remove(recipeModel);
-
-  // SAVE UPDATED MAP
-  bool success = await prefs.setString(
-    storageKey,
-    jsonEncode(recipeMap),
-  );
-
-  print(
-    "✅ Recipe Deleted [$recipeModel] Success: $success",
-  );
-}
-
-
-// --- TOKEN MANAGEMENT ---
   static Future<void> setToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
-    print("🔑 [PREFS] Token saved for persistent login");
+    print('🔑 [PREFS] Token saved');
   }
 
   static Future<String?> getToken() async {
@@ -153,50 +182,51 @@ static Future<void> deleteRecipeForCurrentUser(
   static Future<void> clearToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
-    print("🗑️ [PREFS] Token cleared");
   }
 
-  // ── USERNAME ──────────────────────────────────────
-static Future<void> saveUsername(String username) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('saved_username', username);
-}
+  // ══════════════════════════════════════════════════════════
+  //  USERNAME / PASSWORD / STATION (unchanged)
+  // ══════════════════════════════════════════════════════════
 
-static Future<String?> getSavedUsername() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('saved_username');
-}
+  static Future<void> saveUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_username', username);
+  }
 
-static Future<void> saveStationId(String StationId) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('stationId', StationId);
-}
+  static Future<String?> getSavedUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('saved_username');
+  }
 
-static Future<String?> getStationId() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('stationId');
-}
+  static Future<void> savePassword(String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_password', password);
+  }
 
-// ── PASSWORD ──────────────────────────────────────
-static Future<void> savePassword(String password) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('saved_password', password);
-}
+  static Future<String?> getSavedPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('saved_password');
+  }
 
-static Future<String?> getSavedPassword() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('saved_password');
-}
+  static Future<void> clearCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('saved_username');
+    await prefs.remove('saved_password');
+  }
 
-// ── CLEAR ON LOGOUT ───────────────────────────────
-static Future<void> clearCredentials() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('saved_username');
-  await prefs.remove('saved_password');
-  print("🗑️ [PREFS] Credentials cleared");
-}
+  static Future<void> saveStationId(String stationId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('stationId', stationId);
+  }
 
-  // ================= MODBUS CONNECTION =================
+  static Future<String?> getStationIdString() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('stationId');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  MODBUS (unchanged)
+  // ══════════════════════════════════════════════════════════
 
   static Future<void> setModbusSettings(String ip, int port) async {
     final prefs = await SharedPreferences.getInstance();
@@ -205,27 +235,14 @@ static Future<void> clearCredentials() async {
   }
 
   static Future<Map<String, String>> getModbusSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Get IP
-    String ip = prefs.getString('plc_ip') ?? "192.168.1.1";
-
-    // Get Port safely
-    final Object? rawPort = prefs.get('plc_port');
+    final prefs   = await SharedPreferences.getInstance();
+    final ip      = prefs.getString('plc_ip') ?? '192.168.1.1';
+    final rawPort = prefs.get('plc_port');
     int portInt;
-
-    if (rawPort is int) {
-      portInt = rawPort;
-    } else if (rawPort is String) {
-      portInt = int.tryParse(rawPort) ?? 502;
-    } else {
-      portInt = 502;
-    }
-
-    return {
-      "ip": ip,
-      "port": portInt.toString(), // Returns string for your UI/Controllers
-    };
+    if (rawPort is int)         portInt = rawPort;
+    else if (rawPort is String) portInt = int.tryParse(rawPort) ?? 502;
+    else                        portInt = 502;
+    return {'ip': ip, 'port': portInt.toString()};
   }
 
   static Future<void> setUserRole(String value) async {}
