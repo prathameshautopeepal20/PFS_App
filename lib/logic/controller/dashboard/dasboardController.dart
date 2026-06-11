@@ -587,14 +587,14 @@ class DashboardController extends GetxController {
       // SERVER ERROR
       // =================================================
 
-      else {
-        loadDemoData();
+      // else {
+      //   loadDemoData();
 
-        Get.snackbar(
-          "Server Error",
-          "Status : ${response.statusCode}",
-        );
-      }
+      //   Get.snackbar(
+      //     "Server Error",
+      //     "Status : ${response.statusCode}",
+      //   );
+     // }
     } catch (e) {
       print("❌ ERROR => $e");
 

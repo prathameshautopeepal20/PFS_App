@@ -1,85 +1,132 @@
 import 'package:get/get.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
-import 'package:atpl_flashing_app/api/app_envirments.dart';
-import 'package:atpl_flashing_app/api/app_urls.dart';
-import 'package:atpl_flashing_app/routes/routes_string.dart';
+import 'package:atpl_flashing_app/models/vehicle_flashing_model.dart';
 
 class VehicleFlashingController extends GetxController {
-  /// VEHICLE LIST
-  RxList<VehicleFlashingModel> vehicleList = <VehicleFlashingModel>[].obs;
 
-  /// ADD VEHICLE (Popup replaced with dummy data)
-  Future<void> addVehicle() async {
+  // ================= INDIVIDUAL ECU ROWS =================
+
+  RxList<VehicleFlashingModel> individualList =
+      <VehicleFlashingModel>[].obs;
+
+
+  // ================= FLASHING TABLE LIST =================
+
+  RxList<VehicleFlashingModel> vehicleList =
+      <VehicleFlashingModel>[].obs;
+
+
+  @override
+  void onInit() {
+    super.onInit();
+
+    // Create 4 empty rows for Individual flashing
+    for (int i = 0; i < 4; i++) {
+      individualList.add(
+        VehicleFlashingModel.empty(),
+      );
+    }
+  }
+
+
+  // ================= ADD VEHICLE =================
+
+  void addVehicleRow() {
+
     vehicleList.add(
-      VehicleFlashingModel(
-        modelName: "Toyota",
-        subModelName: "Corolla",
-        statusMessage: "Ready",
-        progressValue: 0.0,
-        dongleConnected: false,
-        ecuConnected: false,
-        flashStarted: false,
-      ),
+      VehicleFlashingModel.empty(),
     );
+
   }
 
-  /// CONNECT DONGLE (SIMULATION)
-  Future<void> connectDongle(VehicleFlashingModel v) async {
-    v.statusMessage = "Connecting Dongle...";
-    vehicleList.refresh();
 
-    await Future.delayed(const Duration(seconds: 2));
+  // ================= START FLASHING =================
 
-    v.dongleConnected = true;
-    v.ecuConnected = true;
-    v.statusMessage = "Dongle + ECU Connected";
-    vehicleList.refresh();
+  void startFlashing(
+    VehicleFlashingModel vehicle,
+  ) {
+
+    int index = vehicleList.indexOf(vehicle);
+
+    if (index == -1) return;
+
+
+    // Update status
+    vehicleList[index] =
+        vehicle.copyWith(
+          statusMessage: "Flashing Started",
+          progressValue: 0.1,
+          flashStarted: true,
+        );
+
+
+    _simulateProgress(index);
   }
 
-  /// START FLASHING (SIMULATION)
-  Future<void> startFlashing(VehicleFlashingModel v) async {
-    if (!v.dongleConnected || !v.ecuConnected) {
-      v.statusMessage = "Connect Dongle & ECU first";
-      vehicleList.refresh();
-      return;
+
+  // ================= FLASH PROGRESS =================
+
+  Future<void> _simulateProgress(
+    int index,
+  ) async {
+
+
+    for (
+      double i = 0.1;
+      i <= 1.0;
+      i += 0.1
+    ) {
+
+      await Future.delayed(
+        const Duration(
+          milliseconds: 500,
+        ),
+      );
+
+
+      // Safety check
+      if (index >= vehicleList.length) {
+        return;
+      }
+
+
+      vehicleList[index] =
+          vehicleList[index].copyWith(
+
+        progressValue: i,
+
+        statusMessage:
+          i >= 1.0
+          ? "Completed"
+          : "Flashing...",
+
+      );
     }
-
-    v.flashStarted = true;
-
-    for (int i = 1; i <= 100; i++) {
-      await Future.delayed(const Duration(milliseconds: 50));
-      v.progressValue = i / 100;
-      v.statusMessage = "Flashing... $i%";
-      vehicleList.refresh();
-    }
-
-    v.statusMessage = "Flashing Completed";
-    v.flashStarted = false;
-    vehicleList.refresh();
   }
-}
 
-/// MODEL
-class VehicleFlashingModel {
-  String modelName;
-  String subModelName;
 
-  String statusMessage;
+  // ================= FUTURE API METHODS =================
 
-  double progressValue;
+  Future<void> connectDongle() async {
 
-  bool dongleConnected;
-  bool ecuConnected;
-  bool flashStarted;
+    // Dongle connection API
+  }
 
-  VehicleFlashingModel({
-    required this.modelName,
-    required this.subModelName,
-    required this.statusMessage,
-    required this.progressValue,
-    required this.dongleConnected,
-    required this.ecuConnected,
-    required this.flashStarted,
-  });
+
+  Future<void> checkEcuConnection() async {
+
+    // ECU connection API
+  }
+
+
+  Future<void> startFlashApi() async {
+
+    // Start flashing API
+  }
+
+
+  Future<void> getFlashProgress() async {
+
+    // Progress API
+  }
+
 }

@@ -10,6 +10,7 @@ import 'package:atpl_flashing_app/views/screens/dashboard/sensorAnalysis.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/settings.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/testRecipeScreen.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/testingScreen.dart';
+import 'package:atpl_flashing_app/views/screens/dashboard/flashingscreen.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/routes/routes_string.dart';
 import 'package:atpl_flashing_app/views/screens/splash_screen.dart';
@@ -48,17 +49,20 @@ class AppRoutes {
       binding: LoginBindings(),
       page: () => LoginScreen(),
     ),
-    GetPage(
-      name: Routes.settingsScreen,
-      page: () => SettingsScreen(),
-    ),
+    // GetPage(
+    //   name: Routes.settingsScreen,
+    //   page: () => SettingsScreen(),
+    // ),
      GetPage(
       name: Routes.recipeAdditionReadOnlyScreen,
       page: () => RecipeAdditionReadOnly(),
     ),
+     
      GetPage(
-      name: Routes.sensorAnalysis,
-      page: () => SensorAnalysisScreen(),
+      name: Routes.flashingScreen,
+      page: () =>  FlashProcessScreen(),
+
+      
     ),
     // GetPage(
     //   name: Routes.registerScreen,

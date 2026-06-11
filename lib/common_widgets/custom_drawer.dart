@@ -285,7 +285,7 @@
 //   }
 // }
 import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/batch_flashing_popup.dart';
+//import 'package:atpl_flashing_app/views/screens/dashboard/batch_flashing_popup.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/routes/routes_string.dart';
@@ -317,44 +317,47 @@ class CustomDrawer extends StatelessWidget {
                         Routes.dashboardScreen),
                     _buildSidebarDivider(),
 
-                    ListTile(
-                      leading: Icon(
-                        Icons.layers_outlined,
-                        color: Colors.orange.shade600,
-                      ),
-                      title: const Text(
-                        "Batch Flashing",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      onTap: () async {
-                        final result = await showDialog(
-                          context: Get.context!,
-                          barrierDismissible: false,
-                          builder: (context) => const BatchFlashingPopup(),
-                        );
+                    // ListTile(
+                    //   leading: Icon(
+                    //     Icons.layers_outlined,
+                    //     color: Colors.orange.shade600,
+                    //   ),
+                    //   title: const Text(
+                    //     "Batch Flashing",
+                    //     style: TextStyle(
+                    //       fontWeight: FontWeight.w600,
+                    //     ),
+                    //   ),
+                    //   onTap: () async {
+                    //     final result = await showDialog(
+                    //       context: Get.context!,
+                    //       barrierDismissible: false,
+                    //       builder: (context) => const BatchFlashingPopup(),
+                    //     );
 
-                        if (result != null) {
-                          Get.toNamed(
-                            Routes.batchFlashingScreen,
-                            arguments: result,
-                          );
-                        }
-                      },
+                    //     if (result != null) {
+                    //       Get.toNamed(
+                    //         Routes.batchFlashingScreen,
+                    //         arguments: result,
+                    //       );
+                    //     }
+                    //   },
+                    // ),
+
+                    // _buildSidebarTile(Icons.flash_on_outlined,
+                    //     "Individual Flashing", Routes.testRecipeScreen),
+                    // _buildSidebarDivider(),
+
+                    _buildSidebarTile(
+                      Icons.flash_on_outlined,
+                      " Flashing",
+                      Routes.flashingScreen,
                     ),
+                    // _buildSidebarDivider(),
 
-                    _buildSidebarTile(Icons.flash_on_outlined,
-                        "Individual Flashing", Routes.testRecipeScreen),
-                    _buildSidebarDivider(),
-
-                    _buildSidebarTile(Icons.directions_car_outlined,
-                        "Vehicle Flashing", Routes.vehicalescreen),
-                    _buildSidebarDivider(),
-
-                    _buildSidebarTile(Icons.sync_outlined, "Data Sync",
-                        Routes.datasyncscreen),
-                    _buildSidebarDivider(),
+                    // _buildSidebarTile(Icons.sync_outlined, "Data Sync",
+                    //     Routes.datasyncscreen),
+                    // _buildSidebarDivider(),
 
                     // --- SETTINGS SECTION WITH SUB-MENU ---
                     // _buildSettingsSection(),
@@ -478,11 +481,11 @@ class CustomDrawer extends StatelessWidget {
                     CrossAxisAlignment.start, // Aligns logo/name to the left
                 children: [
                   Center(
-                    child: Image.asset(
-                      'assets/new/autopeepal.png',
-                      height: 75, // Adjust as needed
-                      fit: BoxFit.contain,
-                    ),
+                    // child: Image.asset(
+                    //   'assets/new/autopeepal.png',
+                    //   height: 75, // Adjust as needed
+                    //   fit: BoxFit.contain,
+                    // ),
                   ),
                   const SizedBox(
                     height: 2,
