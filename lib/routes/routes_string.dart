@@ -33,7 +33,7 @@ class Routes {
   static const flashingScreen = '/flashingScreen';
   static const datasyncscreen = '/datasyncScreen';
   static const recipeAdditionScreen = '/recipeAdditionScreen';
-  static const recipeAdditionReadOnlyScreen = '/recipeAdditionReadOnlyScreen';
+  // static const recipeAdditionReadOnlyScreen = '/recipeAdditionReadOnlyScreen';
   static const settingsScreen = '/settingsScreen';
   static const sensorAnalysis = '/sensorAnalysis';
   static const batchFlashingScreen = "/batchFlashingScreen";

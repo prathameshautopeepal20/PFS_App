@@ -1,635 +1,387 @@
-// // import 'dart:io';
-// // import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
-// // import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
-// // import 'package:atpl_flashing_app/logic/controller/dataSyncController.dart';
-// // import 'package:atpl_flashing_app/routes/routes_string.dart';
-// // import 'package:atpl_flashing_app/themes/app_colors.dart';
-// // import 'package:flutter/material.dart';
-// // import 'package:get/get.dart';
-// // import 'package:path_provider/path_provider.dart';
+// lib/views/widgets/custom_drawer.dart
+// Light Theme Drawer — fixed overflow + no overlap
 
-// // class CustomDrawer extends StatelessWidget {
-// //   CustomDrawer({Key? key}) : super(key: key);
-
-// //   final String drawerTitle = "CP-TMTL";
-// //   final String drawerSubtitle = "Sensor Zig";
-// //   final DashboardController controller = Get.find();
-// //   final DataSyncController dataSyncController = Get.find();
-
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     final bool isDesktop = MediaQuery.of(context).size.width > 800;
-
-// //     return Drawer(
-// //       width: isDesktop ? 400 : MediaQuery.of(context).size.width * 0.85,
-// //       child: Column(
-// //         children: [
-// //           // Header
-// //           Container(
-// //             width: double.infinity,
-// //             padding: EdgeInsets.symmetric(horizontal: 24, vertical: isDesktop ? 50 : 64),
-// //             decoration: BoxDecoration(
-// //               color: AppColors.primaryColor,
-// //               gradient: LinearGradient(
-// //                 colors: [AppColors.primaryColor, AppColors.primaryColor.withOpacity(0.8)],
-// //                 begin: Alignment.topLeft, end: Alignment.bottomRight,
-// //               ),
-// //             ),
-// //             child: Column(
-// //               children: [
-// //                 Text(drawerTitle, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 30 : 26, fontWeight: FontWeight.bold)),
-// //                 const SizedBox(height: 10),
-// //                 Text(drawerSubtitle, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500)),
-// //               ],
-// //             ),
-// //           ),
-
-// //           // Menu
-// //           Expanded(
-// //             child: Container(
-// //               color: Colors.white,
-// //               child: Scrollbar(
-// //                 thumbVisibility: isDesktop,
-// //                 child: ListView(
-// //                   primary: true, // IMPORTANT: Fixes the Scrollbar exception
-// //                   padding: const EdgeInsets.symmetric(vertical: 12),
-// //                   children: [
-// //                     _buildTile(Icons.analytics_outlined, "Dashboard", () => Get.back()),
-// //                     buildDivider(),
-// //                     _buildTile(Icons.assignment_turned_in_outlined, "Testing", () {
-// //                       Get.back();
-// //                       Get.toNamed(Routes.testingScreen);
-// //                     }),
-// //                     buildDivider(),
-// //                     _buildTile(Icons.laptop_windows_outlined, "Test Recipe", () {
-// //                       Get.back();
-// //                       Get.toNamed(Routes.testRecipeScreen);
-// //                     }),
-// //                     buildDivider(),
-// //                     _buildTile(Icons.settings_outlined, "Settings", () async {
-// //                       await AppPreferences.clearExceptCredentials();
-// //                       await _clearLocalData();
-// //                       Get.offAllNamed(Routes.loginScreen);
-// //                     }),
-// //                     buildDivider(),
-// //                   ],
-// //                 ),
-// //               ),
-// //             ),
-// //           ),
-// //         ],
-// //       ),
-// //     );
-// //   }
-
-// //   Widget _buildTile(IconData icon, String title, VoidCallback onTap) {
-// //     return ListTile(
-// //       leading: Icon(icon, color: Colors.black87, size: 24),
-// //       title: Text(title, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.w600)),
-// //       onTap: onTap,
-// //       contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
-// //       visualDensity: VisualDensity.comfortable,
-// //     );
-// //   }
-
-// //   Future<void> _clearLocalData() async {
-// //     final dir = await getApplicationDocumentsDirectory();
-// //     final files = ['MODEL_LocalList.txt', 'IOR_LocalList.txt', 'Actuator_LocalList.txt', 'FreezeFrame_LocalList.txt', 'UserDetail_LocalData.txt', 'UserRequest_LocalData.txt'];
-// //     for (var f in files) {
-// //       final file = File('${dir.path}/$f');
-// //       if (await file.exists()) await file.delete();
-// //     }
-// //   }
-
-// //   Widget buildDivider() => Divider(color: Colors.grey.shade300, height: 1, indent: 20, endIndent: 20);
-// // }
-
-// import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
-// import 'package:flutter/material.dart';
-// import 'package:get/get.dart';
-// import 'package:atpl_flashing_app/routes/routes_string.dart';
-// import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
-
-// class CustomDrawer extends StatelessWidget {
-//   CustomDrawer({Key? key}) : super(key: key);
-// final DashboardController controller = Get.find();
-//   // We use an RxBool so we can toggle it without a full StatefulWidget rebuild
-//   final RxBool isExpanded = true.obs;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Obx(() => AnimatedContainer(
-//           duration: const Duration(milliseconds: 300),
-//           width: isExpanded.value ? 300 : 80, // Expanded vs Mini width
-//           decoration: BoxDecoration(
-//             color: Colors.white,
-//             border: Border(right: BorderSide(color: Colors.grey.shade300)),
-//           ),
-//           child: Column(
-//             children: [
-//               // --- HEADER / TOGGLE SECTION ---
-//               _buildHeader(),
-
-//               const Divider(height: 1),
-
-//               // --- MENU ITEMS ---
-//               Expanded(
-//                 child: ListView(
-//                   primary: true,
-//                   children: [
-//                     _buildSidebarTile(Icons.analytics_outlined, "Dashboard",
-//                         Routes.dashboardScreen),
-//                     _buildSidebarDivider(), // Line after Dashboard
-
-//                     _buildSidebarTile(Icons.assignment_turned_in_outlined,
-//                         "Testing", Routes.testingScreen),
-//                     _buildSidebarDivider(), // Line after Testing
-
-//                     _buildSidebarTile(Icons.laptop_windows_outlined,
-//                         "Test Recipe", Routes.testRecipeScreen),
-//                     _buildSidebarDivider(), // Line after Test Recipe
-
-//                     _buildSidebarTile(
-//                         Icons.settings_outlined, "Settings", Routes.settingsScreen,
-//                         isLogout: true),
-//                     _buildSidebarDivider(),
-//                     // No divider here if it's the last item, or add one if preferred
-//                   ],
-//                 ),
-//               ),
-//                Obx(() => SafeArea(
-//                 child: Container(
-//                   padding: const EdgeInsets.symmetric(vertical: 12),
-//                   child: Column(
-//                     children: [
-//                       Text(
-//                         controller.appName.value,
-//                         style: const TextStyle(
-//                           fontSize: 13,
-//                           fontWeight: FontWeight.w600,
-//                         ),
-//                       ),
-//                       const SizedBox(height: 4),
-//                       Text(
-//                         "Version ${controller.version.value} (${controller.buildNumber.value})",
-//                         style: const TextStyle(
-//                           color: Colors.grey,
-//                           fontSize: 12,
-//                           fontWeight: FontWeight.w500,
-//                         ),
-//                       ),
-//                     ],
-//                   ),
-//                 ),
-//               ))
-//             ],
-//           ),
-//         ));
-//   }
-
-//   Widget _buildSidebarDivider() {
-//     return Divider(
-//       color: Colors.blue.shade600
-//           .withOpacity(0.3), // Lower opacity for subtler look
-//       height: 1, // Space occupied by the divider widget
-//       thickness: 1, // Actual line thickness
-//       indent: 20, // Padding from the left
-//       endIndent: 20, // Padding from the right
-//     );
-//   }
-
-//   Widget _buildHeader() {
-//     return Container(
-//       height: 120,
-//       padding: const EdgeInsets.symmetric(horizontal: 16),
-//       color: Colors.blue.shade600,
-//       child: Row(
-//         mainAxisAlignment: isExpanded.value
-//             ? MainAxisAlignment.spaceBetween
-//             : MainAxisAlignment.center,
-//         children: [
-//           if (isExpanded.value)
-//             const Flexible(
-//               child: Text(
-//                 "CP-TMTL",
-//                 style: TextStyle(
-//                     color: Colors.white,
-//                     fontSize: 20,
-//                     fontWeight: FontWeight.bold),
-//                 overflow: TextOverflow.ellipsis,
-//               ),
-//             ),
-//           IconButton(
-//             icon: Icon(isExpanded.value ? Icons.menu_open : Icons.menu,
-//                 color: Colors.white),
-//             onPressed: () => isExpanded.toggle(),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildSidebarTile(IconData icon, String title, String route,
-//       {bool isLogout = false}) {
-//     final double iconSize = GetPlatform.isWindows ? 28 : 24;
-
-//     return Obx(() {
-//       // Check if the drawer is collapsed
-//       if (!isExpanded.value) {
-//         return InkWell(
-//           onTap: () => _handleNavigation(route, isLogout),
-//           child: Container(
-//             height: 50, // Matches standard ListTile height
-//             width: double.infinity,
-//             alignment: Alignment.center,
-//             child: Icon(
-//               icon,
-//               color: Colors.blue.shade600,
-//               size: iconSize,
-//             ),
-//           ),
-//         );
-//       }
-
-//       // Standard ListTile only when there is plenty of room (Expanded)
-//       return ListTile(
-//         minLeadingWidth: 0,
-//         horizontalTitleGap: 16,
-//         contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-//         leading: Icon(
-//           icon,
-//           color: Colors.blue.shade600,
-//           size: iconSize,
-//         ),
-//         title: Text(
-//           title,
-//           style: TextStyle(
-//             fontWeight: FontWeight.w600,
-//             fontSize: GetPlatform.isWindows ? 16 : 14,
-//             color: Colors.black87,
-//           ),
-//         ),
-//         onTap: () => _handleNavigation(route, isLogout),
-//       );
-//     });
-//   }
-
-// // Separate navigation logic to keep code clean
-//   void _handleNavigation(String route, bool isLogout) async {
-//     if (isLogout) {
-//       await AppPreferences.clearExceptCredentials();
-//       Get.offAllNamed(route);
-//     } else {
-//       Get.toNamed(route);
-//     }
-//   }
-// }
 import 'package:atpl_flashing_app/logic/controller/dashboard/dasboardController.dart';
-//import 'package:atpl_flashing_app/views/screens/dashboard/batch_flashing_popup.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/routes/routes_string.dart';
 import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
 
+// ── Light theme colors ────────────────────────────────────────
+const Color _dBg      = Color(0xFFFFFFFF);
+const Color _dSurface = Color(0xFFF8F9FA);
+const Color _dBorder  = Color(0xFFE9ECEF);
+const Color _dOrange  = Color(0xFFF97316);
+const Color _dOrangD  = Color(0xFFEA580C);
+const Color _dOrangDD = Color(0xFF9A3412);
+const Color _dText    = Color(0xFF1E293B);
+const Color _dText2   = Color(0xFF64748B);
+const Color _dActive  = Color(0xFFFFF7ED);
+const Color _dRed     = Color(0xFFEF4444);
+const Color _dRedBg   = Color(0xFFFEF2F2);
+
 class CustomDrawer extends StatelessWidget {
   CustomDrawer({Key? key}) : super(key: key);
+
   final DashboardController controller = Get.find();
   final RxBool isExpanded = true.obs;
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: isExpanded.value ? 300 : 80,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(right: BorderSide(color: Colors.grey.shade300)),
-          ),
-          child: Column(
-            children: [
-              _buildHeader(),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  primary: true,
-                  children: [
-                    _buildSidebarTile(Icons.analytics_outlined, "Dashboard",
-                        Routes.dashboardScreen),
-                    _buildSidebarDivider(),
-
-                    // ListTile(
-                    //   leading: Icon(
-                    //     Icons.layers_outlined,
-                    //     color: Colors.orange.shade600,
-                    //   ),
-                    //   title: const Text(
-                    //     "Batch Flashing",
-                    //     style: TextStyle(
-                    //       fontWeight: FontWeight.w600,
-                    //     ),
-                    //   ),
-                    //   onTap: () async {
-                    //     final result = await showDialog(
-                    //       context: Get.context!,
-                    //       barrierDismissible: false,
-                    //       builder: (context) => const BatchFlashingPopup(),
-                    //     );
-
-                    //     if (result != null) {
-                    //       Get.toNamed(
-                    //         Routes.batchFlashingScreen,
-                    //         arguments: result,
-                    //       );
-                    //     }
-                    //   },
-                    // ),
-
-                    // _buildSidebarTile(Icons.flash_on_outlined,
-                    //     "Individual Flashing", Routes.testRecipeScreen),
-                    // _buildSidebarDivider(),
-
-                    _buildSidebarTile(
-                      Icons.flash_on_outlined,
-                      " Flashing",
-                      Routes.flashingScreen,
-                    ),
-                    // _buildSidebarDivider(),
-
-                    // _buildSidebarTile(Icons.sync_outlined, "Data Sync",
-                    //     Routes.datasyncscreen),
-                    // _buildSidebarDivider(),
-
-                    // --- SETTINGS SECTION WITH SUB-MENU ---
-                    // _buildSettingsSection(),
-
-                    // _buildSidebarDivider(),
-
-                    // Logout Option
-                    _buildSidebarTile(
-                        Icons.logout_outlined, "Logout", Routes.loginScreen,
-                        isLogout: true),
-                  ],
-                ),
-              ),
-              _buildVersionInfo(),
-            ],
-          ),
-        ));
-  }
-
-  // --- NEW: SETTINGS EXPANSION SECTION ---
-  Widget _buildSettingsSection() {
-    final double iconSize = GetPlatform.isWindows ? 28 : 24;
-
     return Obx(() {
-      if (!isExpanded.value) {
-        // If collapsed, show a simple icon that opens a small menu or expands the drawer
-        return IconButton(
-          icon: Icon(Icons.settings_outlined,
-              color: Colors.orange.shade600, size: iconSize),
-          onPressed: () => isExpanded.value = true,
-        );
-      }
-
-      return ExpansionTile(
-        leading: Icon(Icons.settings_outlined,
-            color: Colors.orange.shade600, size: iconSize),
-        title: Text(
-          "Settings",
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: GetPlatform.isWindows ? 16 : 14,
-            color: Colors.black87,
-          ),
-        ),
-        iconColor: Colors.orange.shade600,
-        collapsedIconColor: Colors.grey,
-        childrenPadding: const EdgeInsets.only(left: 20), // Indent sub-items
-        children: [
-          _buildSubTile(Icons.electrical_services_outlined, "PLC Configuration",
-              Routes.settingsScreen),
-          _buildSubTile(Icons.analytics_outlined, "Sensor Analysis",
-              Routes.sensorAnalysis),
-        ],
-      );
-    });
-  }
-
-  Widget _buildSubTile(IconData icon, String title, String route) {
-    return ListTile(
-      visualDensity: VisualDensity.compact,
-      leading: Icon(icon, color: Colors.orange.shade400, size: 25),
-      title: Text(
-        title,
-        style: const TextStyle(
-            fontSize: 18,
-            color: Colors.black54,
-            fontWeight: FontWeight.w500,
-            fontFamily: "Roboto-Regular"),
-      ),
-      onTap: () => Get.toNamed(route),
-    );
-  }
-
-  // Widget _buildHeader() {
-  //   return Container(
-  //     height: 120,
-  //     padding: const EdgeInsets.symmetric(horizontal: 16),
-  //     color: Colors.blue.shade600,
-  //     child: Row( 
-  //       mainAxisAlignment: isExpanded.value
-  //           ? MainAxisAlignment.spaceBetween
-  //           : MainAxisAlignment.center,
-  //       children: [
-
-  //         if (isExpanded.value)
-  //           const Flexible(
-  //             child: Text(
-  //               "CP-TMTL",
-  //               style: TextStyle(
-  //                   color: Colors.white,
-  //                   fontSize: 20,
-  //                   fontWeight: FontWeight.bold),
-  //               overflow: TextOverflow.ellipsis,
-  //             ),
-  //           ),
-  //         IconButton(
-  //           icon: Icon(isExpanded.value ? Icons.menu_open : Icons.menu,
-  //               color: Colors.white),
-  //           onPressed: () => isExpanded.toggle(),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-  Widget _buildHeader() {
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: const Color(0xFFEA580C),
-      child: Row(
-        mainAxisAlignment: isExpanded.value
-            ? MainAxisAlignment.spaceBetween
-            : MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (isExpanded.value)
-            Flexible(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment:
-                    CrossAxisAlignment.start, // Aligns logo/name to the left
+      final w = isExpanded.value ? 260.0 : 72.0;
+      return SizedBox(
+        width: w,
+        child: Material(
+          color: _dBg,
+          elevation: 4,
+          shadowColor: Colors.black26,
+          child: Column(children: [
+            _Header(isExpanded: isExpanded),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
                 children: [
-                  Center(
-                    // child: Image.asset(
-                    //   'assets/new/autopeepal.png',
-                    //   height: 75, // Adjust as needed
-                    //   fit: BoxFit.contain,
-                    // ),
-                  ),
-                  const SizedBox(
-                    height: 2,
-                  ),
-                  Center(
-                    child: const Text(
-                      "ATPL-PFS",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  _NavItem(
+                    icon: Icons.dashboard_rounded,
+                    label: 'Dashboard',
+                    route: Routes.dashboardScreen,
+                    isExpanded: isExpanded),
+                  const SizedBox(height: 4),
+                  _NavItem(
+                    icon: Icons.bolt_rounded,
+                    label: 'Flashing',
+                    route: Routes.flashingScreen,
+                    isExpanded: isExpanded),
+                  const SizedBox(height: 16),
+                  // Section label / divider
+                  Obx(() => isExpanded.value
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: 8, bottom: 6),
+                          child: Text('ACCOUNT',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: _dText2.withOpacity(0.6),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5)))
+                      : const Divider(color: _dBorder, height: 20)),
+                  _NavItem(
+                    icon: Icons.logout_rounded,
+                    label: 'Logout',
+                    route: Routes.loginScreen,
+                    isExpanded: isExpanded,
+                    isLogout: true),
                 ],
               ),
             ),
-
-          // The Toggle Button
-          IconButton(
-            icon: Icon(
-              isExpanded.value ? Icons.menu_open : Icons.menu,
-              color: Colors.white,
-            ),
-            onPressed: () => isExpanded.toggle(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSidebarTile(IconData icon, String title, String route,
-      {bool isLogout = false}) {
-    final double iconSize = GetPlatform.isWindows ? 28 : 24;
-
-    return Obx(() {
-      if (!isExpanded.value) {
-        return InkWell(
-          onTap: () => _handleNavigation(route, isLogout),
-          child: Container(
-            height: 50,
-            width: double.infinity,
-            alignment: Alignment.center,
-            child: Icon(icon,
-                color: isLogout ? Colors.red.shade400 : Colors.orange.shade600,
-                size: iconSize),
-          ),
-        );
-      }
-
-      return ListTile(
-        minLeadingWidth: 0,
-        horizontalTitleGap: 16,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-        leading: Icon(icon,
-            color: isLogout ? Colors.red.shade400 : Colors.orange.shade600,
-            size: iconSize),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: GetPlatform.isWindows ? 16 : 14,
-            color: isLogout ? Colors.red.shade700 : Colors.black87,
-          ),
+            _VersionInfo(
+              controller: controller,
+              isExpanded: isExpanded),
+          ]),
         ),
-        onTap: () => _handleNavigation(route, isLogout),
       );
     });
   }
+}
 
-  Widget _buildVersionInfo() {
-    return Obx(() => SafeArea(
-          child: GestureDetector(
-            onTap: () => Get.toNamed(Routes.devScreen), // ✅ navigate on tap
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: isExpanded.value
-                  ? Column(
-                      children: [
-                        Text(
-                            "Sponsored By: ${controller.appName.value.replaceAll('_', ' ')}",
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Text(
-                            "Version ${controller.version.value} (${controller.buildNumber.value})",
-                            style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    )
-                  : const Text("v1.1",
-                      style: TextStyle(fontSize: 10, color: Colors.grey)),
+// ════════════════════════════════════════════════════════════
+//  Header — orange gradient, overflow-safe
+// ════════════════════════════════════════════════════════════
+class _Header extends StatelessWidget {
+  final RxBool isExpanded;
+  const _Header({required this.isExpanded});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final expanded = isExpanded.value;
+      return Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [_dOrange, _dOrangD, _dOrangDD],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+          boxShadow: [BoxShadow(
+            color: Color(0x30F97316),
+            blurRadius: 6, offset: Offset(0, 3))]),
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 64,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  // Logo circle — always visible
+                  // Container(
+                  //   width: 36, height: 36,
+                  //   decoration: BoxDecoration(
+                  //     color: Colors.white24,
+                  //     shape: BoxShape.circle,
+                  //     border: Border.all(
+                  //       color: Colors.white38, width: 1.5)),
+                  //   child: const Center(child: Text('A',
+                  //     style: TextStyle(
+                  //       color: Colors.white, fontSize: 16,
+                  //       fontWeight: FontWeight.w900)))),
+
+                  // App name — only when expanded
+                  if (expanded) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('ATPL-PFS',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white, fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2)),
+                          Text('ECU Flash System',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color.fromARGB(222, 255, 255, 255),
+                              fontSize: 9.5)),
+                        ])),
+                    const SizedBox(width: 4),
+                  ] else
+                    const Spacer(),
+
+                  // Toggle button
+                  GestureDetector(
+                    onTap: () => isExpanded.toggle(),
+                    child: Container(
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(63, 255, 255, 255),
+                        borderRadius: BorderRadius.circular(6)),
+                      child: Icon(
+                        expanded
+                            ? Icons.menu_open_rounded
+                            : Icons.menu_rounded,
+                        color: Colors.white, size: 16))),
+                ],
+              ),
             ),
           ),
-        ));
+        ),
+      );
+    });
   }
+}
 
-  // Widget _buildVersionInfo() {
-  //   return Obx(() => SafeArea(
-  //         child: Container(
-  //           padding: const EdgeInsets.symmetric(vertical: 12),
-  //           child: isExpanded.value
-  //               ? Column(
-  //                   children: [
-  //                     Text(
-  //                         "Sponsored By: ${controller.appName.value.replaceAll('_', ' ')}",
-  //                         style: const TextStyle(
-  //                             fontSize: 13, fontWeight: FontWeight.w600)),
-  //                     const SizedBox(height: 4),
-  //                     Text(
-  //                         "Version ${controller.version.value} (${controller.buildNumber.value})",
-  //                         style: const TextStyle(
-  //                             color: Colors.grey,
-  //                             fontSize: 12,
-  //                             fontWeight: FontWeight.w500)),
-  //                   ],
-  //                 )
-  //               : const Text("v1.0",
-  //                   style: TextStyle(fontSize: 10, color: Colors.grey)),
-  //         ),
-  //       ));
-  // }
+// ════════════════════════════════════════════════════════════
+//  Nav Item — overflow-safe
+// ════════════════════════════════════════════════════════════
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final String   route;
+  final RxBool   isExpanded;
+  final bool     isLogout;
 
-  Widget _buildSidebarDivider() {
-    return Divider(
-        color: Colors.blue.shade600.withOpacity(0.1),
-        height: 1,
-        thickness: 1,
-        indent: 20,
-        endIndent: 20);
-  }
+  const _NavItem({
+    required this.icon,    required this.label,
+    required this.route,   required this.isExpanded,
+    this.isLogout = false,
+  });
 
-  void _handleNavigation(String route, bool isLogout) async {
+  bool   get _isActive    => Get.currentRoute == route;
+  Color  get _iconColor   => isLogout ? _dRed    : _dOrange;
+  Color  get _labelColor  => isLogout ? _dRed    : _dText;
+  Color  get _activeBg    => isLogout ? _dRedBg  : _dActive;
+  Color  get _activeAccent=> isLogout ? _dRed    : _dOrange;
+
+  void _onTap() async {
     if (isLogout) {
-      // ✅ ONLY remove the active session ID
-      // Do NOT use clearAll()
       await AppPreferences.logout();
-
       Get.offAllNamed(route);
     } else {
       Get.toNamed(route);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final expanded = isExpanded.value;
+      final active   = _isActive;
+
+      return GestureDetector(
+        onTap: _onTap,
+        child: Container(
+          height: 44,
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: active ? _activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: active
+                ? Border.all(
+                    color: _activeAccent.withOpacity(0.25),
+                    width: 1)
+                : null),
+          child: expanded
+              // ── Expanded row ────────────────────────────
+              ? Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    // Left accent
+                    Container(
+                      width: 3,
+                      margin: const EdgeInsets.only(left: 6, right: 8),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? _activeAccent
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2))),
+                    // Icon box
+                    Container(
+                      width: 30, height: 30,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? _activeAccent.withOpacity(0.12)
+                            : _dSurface,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                          color: active
+                              ? _activeAccent.withOpacity(0.2)
+                              : _dBorder)),
+                      child: Icon(icon,
+                        color: active ? _iconColor : _dText2,
+                        size: 15)),
+                    const SizedBox(width: 8),
+                    // Label — Flexible prevents overflow
+                    Flexible(
+                      child: Text(label,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: active
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: active ? _iconColor : _labelColor))),
+                    // Active dot
+                    if (active) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 5, height: 5,
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          color: _activeAccent,
+                          shape: BoxShape.circle)),
+                    ],
+                  ])
+              // ── Collapsed — icon only ────────────────────
+              : Center(
+                  child: Tooltip(
+                    message: label,
+                    preferBelow: false,
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: active ? _activeBg : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        border: active
+                            ? Border.all(
+                                color: _activeAccent.withOpacity(0.3))
+                            : null),
+                      child: Icon(icon,
+                        color: active ? _iconColor : _dText2,
+                        size: 19)))),
+        ),
+      );
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  Version Info — overflow-safe
+// ════════════════════════════════════════════════════════════
+class _VersionInfo extends StatelessWidget {
+  final DashboardController controller;
+  final RxBool isExpanded;
+  const _VersionInfo({
+    required this.controller,
+    required this.isExpanded});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final expanded = isExpanded.value;
+      return GestureDetector(
+        onTap: () => Get.toNamed(Routes.devScreen),
+        child: Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            color: _dSurface,
+            border: Border(top: BorderSide(color: _dBorder))),
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 12 : 8,
+            vertical: 10),
+          child: expanded
+              ? Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    // Icon
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [_dOrange, _dOrangD]),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: const [BoxShadow(
+                          color: Color(0x25F97316), blurRadius: 5)]),
+                      child: const Icon(Icons.info_outline_rounded,
+                        color: Colors.white, size: 15)),
+                    const SizedBox(width: 8),
+                    // Text — Flexible prevents overflow
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            controller.appName.value
+                                .replaceAll('_', ' ')
+                                .isNotEmpty
+                                ? controller.appName.value
+                                    .replaceAll('_', ' ')
+                                : 'ATPL Flashing App',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5, color: _dText,
+                              fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'v${controller.version.value} '
+                            '(${controller.buildNumber.value})',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 9.5, color: _dText2)),
+                        ])),
+                  ])
+              // Collapsed
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                      color: _dOrange, size: 15),
+                    const SizedBox(height: 2),
+                    Text(
+                      controller.version.value.isNotEmpty
+                          ? 'v${controller.version.value}'
+                          : 'v1.0',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 8, color: _dText2)),
+                  ]),
+        ),
+      );
+    });
   }
 }

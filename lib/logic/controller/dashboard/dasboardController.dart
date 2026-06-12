@@ -56,24 +56,35 @@ class DashboardController extends GetxController {
       final profile   = await AppPreferences.getLoginResponse();
       if (profile == null) return;
 
-      // LoginRespons fields
-      firstName.value = profile['first_name'] ?? '';
-      lastName.value  = profile['last_name']  ?? '';
+      // LoginRespons fields — handle both 'user' nested and flat
+      firstName.value = profile['first_name']
+          ?? profile['user']?['first_name'] ?? '';
+      lastName.value  = profile['last_name']
+          ?? profile['user']?['last_name']  ?? '';
       fullName.value  = '${firstName.value} ${lastName.value}'.trim();
-      role.value      = profile['role'] ?? '';
+      role.value      = profile['role']
+          ?? profile['user']?['role'] ?? '';
 
-      // Profile → oem
-      final prof      = profile['profile'] as Map<String, dynamic>?;
-      oemName.value   = prof?['oem']?['name'] ?? '';
-      userEmail.value = prof?['email'] ?? '';
+      // Profile → oem — handle both structures
+      final prof      = profile['profile'] as Map<String, dynamic>?
+                     ?? profile['user']?['profile'] as Map<String, dynamic>?;
+      oemName.value   = prof?['oem']?['name']
+          ?? profile['oem']?['name'] ?? '';
+      userEmail.value = prof?['email']
+          ?? profile['email']
+          ?? profile['user']?['email'] ?? '';
 
       // Station data
       final stations  = profile['station_data'] as List?;
       if (stations != null && stations.isNotEmpty) {
         _stationId        = stations[0]['id'] ?? 0;
-        stationId.value   = stations[0]['stations_id'] ?? '';
-        stationName.value = stations[0]['description'] ?? '';
+        stationId.value   = stations[0]['stations_id']?.toString()
+            ?? stations[0]['id']?.toString() ?? '';
+        stationName.value = stations[0]['description']
+            ?? stations[0]['name'] ?? '';
       }
+
+      print('✅ User: ${fullName.value} | Role: ${role.value} | Station: ${stationName.value}');
 
       await _loadStats();
     } catch (e) {

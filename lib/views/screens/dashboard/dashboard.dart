@@ -18,7 +18,6 @@ const Color _cOrangD  = Color(0xFFEA580C);
 const Color _cOrangDD = Color(0xFF9A3412);
 const Color _cWhite   = Color(0xFFFFFFFF);
 const Color _cWhite70 = Color(0xB3FFFFFF);
-const Color _cWhite15 = Color(0x26FFFFFF);
 const Color _cWhite40 = Color(0x66FFFFFF);
 const Color _cPass    = Color(0xFF22C55E);
 const Color _cFail    = Color(0xFFEF4444);
@@ -40,7 +39,9 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = Get.find<DashboardController>();
+    final c = Get.isRegistered<DashboardController>()
+        ? Get.find<DashboardController>()
+        : Get.put(DashboardController());
 
     return MainLayout(
       title: 'Dashboard',
@@ -267,7 +268,7 @@ class _StatCard extends StatelessWidget {
       Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white12, shape: BoxShape.circle),
+          color: Color(0x26FFFFFF), shape: BoxShape.circle),
         child: Icon(icon, color: _cWhite, size: 22)),
       const SizedBox(height: 10),
       Text(value, style: const TextStyle(
@@ -275,7 +276,7 @@ class _StatCard extends StatelessWidget {
         fontWeight: FontWeight.w900, letterSpacing: -0.5)),
       const SizedBox(height: 3),
       Text(label, style: const TextStyle(
-        color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+        color: Color(0xB3FFFFFF), fontSize: 12, fontWeight: FontWeight.w500)),
     ]),
   );
 }

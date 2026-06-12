@@ -6,12 +6,7 @@ import 'package:atpl_flashing_app/views/screens/auth/login.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/dashboard.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/home_page_screen.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/individual_flash_screen.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/recipeAdditionScreen.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/recipeAdditionScreenReadOnly.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/sensorAnalysis.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/settings.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/testRecipeScreen.dart';
-import 'package:atpl_flashing_app/views/screens/dashboard/testingScreen.dart';
+// import 'package:atpl_flashing_app/views/screens/dashboard/settings.dart';
 import 'package:atpl_flashing_app/views/screens/dashboard/flashingscreen.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/routes/routes_string.dart';
@@ -26,21 +21,21 @@ class AppRoutes {
       binding: LoginBindings(),
       page: () => LoginScreen(),
     ),
-    GetPage(
-      name: Routes.testingScreen,
-      binding: TestingBinding(),
-      page: () => TestingScreen(),
-    ),
-    GetPage(
-      name: Routes.testRecipeScreen,
-      //binding: LoginBindings(),
-      page: () => TestRecipeScreen(),
-    ),
-    GetPage(
-      name: Routes.recipeAdditionScreen,
-      //binding: LoginBindings(),
-      page: () => RecipeAdditionScreen(),
-    ),
+    // GetPage(
+    //   name: Routes.testingScreen,
+    //   binding: TestingBinding(),
+    //   page: () => TestingScreen(),
+    // ),
+    // GetPage(
+    //   name: Routes.testRecipeScreen,
+    //   //binding: LoginBindings(),
+    //   page: () => TestRecipeScreen(),
+    // ),
+    // GetPage(
+    //   name: Routes.recipeAdditionScreen,
+    //   //binding: LoginBindings(),
+    //   page: () => RecipeAdditionScreen(),
+    // ),
     GetPage(
       name: Routes.dashboardScreen,
       binding: DashboardBindings(),
@@ -55,10 +50,10 @@ class AppRoutes {
     //   name: Routes.settingsScreen,
     //   page: () => SettingsScreen(),
     // ),
-    GetPage(
-      name: Routes.recipeAdditionReadOnlyScreen,
-      page: () => RecipeAdditionReadOnly(),
-    ),
+    // GetPage(
+    //   name: Routes.recipeAdditionReadOnlyScreen,
+    //   page: () => RecipeAdditionReadOnly(),
+    // ),
 
     GetPage(
       name: Routes.flashingScreen,
