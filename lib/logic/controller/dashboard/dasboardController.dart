@@ -54,33 +54,61 @@ class DashboardController extends GetxController {
     try {
       _token          = await AppPreferences.getToken() ?? '';
       final profile   = await AppPreferences.getLoginResponse();
-      if (profile == null) return;
+      if (profile == null) {
+        print('❌ Dashboard: getLoginResponse() returned null');
+        return;
+      }
 
-      // LoginRespons fields — handle both 'user' nested and flat
+      // DEBUG — print full structure to find correct keys
+      print('🔍 Login response keys: ${profile.keys.toList()}');
+      print('🔍 first_name: ${profile['first_name']}');
+      print('🔍 role: ${profile['role']}');
+      print('🔍 station_data: ${profile['station_data']}');
+      print('🔍 profile key: ${profile['profile']}');
+
+      // Try every possible key the API might return
       firstName.value = profile['first_name']
+          ?? profile['firstName']
           ?? profile['user']?['first_name'] ?? '';
       lastName.value  = profile['last_name']
-          ?? profile['user']?['last_name']  ?? '';
-      fullName.value  = '${firstName.value} ${lastName.value}'.trim();
-      role.value      = profile['role']
+          ?? profile['lastName']
+          ?? profile['user']?['last_name'] ?? '';
+
+      // If names empty — fall back to username
+      if (firstName.value.isEmpty && lastName.value.isEmpty) {
+        firstName.value = profile['username']
+            ?? profile['user']?['username'] ?? '';
+      }
+
+      fullName.value = (firstName.value.isNotEmpty && lastName.value.isNotEmpty)
+          ? '${firstName.value} ${lastName.value}'.trim()
+          : firstName.value.isNotEmpty
+              ? firstName.value
+              : profile['username'] ?? '';
+
+      role.value = profile['role']
+          ?? profile['user_role']
           ?? profile['user']?['role'] ?? '';
 
-      // Profile → oem — handle both structures
-      final prof      = profile['profile'] as Map<String, dynamic>?
-                     ?? profile['user']?['profile'] as Map<String, dynamic>?;
+      // OEM
+      final prof = profile['profile'] as Map<String, dynamic>?
+                ?? profile['user']?['profile'] as Map<String, dynamic>?;
       oemName.value   = prof?['oem']?['name']
-          ?? profile['oem']?['name'] ?? '';
+          ?? profile['oem']?['name']
+          ?? profile['oem_name'] ?? '';
       userEmail.value = prof?['email']
           ?? profile['email']
           ?? profile['user']?['email'] ?? '';
 
       // Station data
-      final stations  = profile['station_data'] as List?;
+      final stations = profile['station_data'] as List?;
       if (stations != null && stations.isNotEmpty) {
         _stationId        = stations[0]['id'] ?? 0;
         stationId.value   = stations[0]['stations_id']?.toString()
+            ?? stations[0]['station_id']?.toString()
             ?? stations[0]['id']?.toString() ?? '';
         stationName.value = stations[0]['description']
+            ?? stations[0]['station_name']
             ?? stations[0]['name'] ?? '';
       }
 

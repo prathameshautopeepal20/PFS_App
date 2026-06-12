@@ -208,12 +208,6 @@ class AppPreferences {
     return prefs.getString('saved_password');
   }
 
-  static Future<void> clearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('saved_username');
-    await prefs.remove('saved_password');
-  }
-
   static Future<void> saveStationId(String stationId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('stationId', stationId);
@@ -246,4 +240,42 @@ class AppPreferences {
   }
 
   static Future<void> setUserRole(String value) async {}
+
+  // ══════════════════════════════════════════════════════════
+  //  REMEMBER ME — Save / Get / Clear credentials
+  // ══════════════════════════════════════════════════════════
+  static const _keyRemUser = 'rem_username';
+  static const _keyRemPass = 'rem_password';
+  static const _keyRemRole = 'rem_role';
+  static const _keyRemFlag = 'rem_flag';
+
+  static Future<void> saveCredentials(
+      String username, String password, String role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyRemUser, username);
+    await prefs.setString(_keyRemPass, password);
+    await prefs.setString(_keyRemRole, role);
+    await prefs.setBool(_keyRemFlag, true);
+    print('💾 [PREFS] Credentials saved for: $username');
+  }
+
+  static Future<Map<String, String>?> getSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final flag  = prefs.getBool(_keyRemFlag) ?? false;
+    if (!flag) return null;
+    return {
+      'username': prefs.getString(_keyRemUser) ?? '',
+      'password': prefs.getString(_keyRemPass) ?? '',
+      'role':     prefs.getString(_keyRemRole) ?? 'Admin',
+    };
+  }
+
+  static Future<void> clearCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyRemUser);
+    await prefs.remove(_keyRemPass);
+    await prefs.remove(_keyRemRole);
+    await prefs.setBool(_keyRemFlag, false);
+    print('🗑️ [PREFS] Credentials cleared');
+  }
 }

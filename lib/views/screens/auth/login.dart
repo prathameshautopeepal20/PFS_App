@@ -42,7 +42,6 @@ class LoginScreen extends GetView<LoginController> {
             child: Row(
               children: [
                 // ================= LEFT PANEL =================
-                // ================= LEFT PANEL =================
                 if (isDesktop)
                   Expanded(
                     child: Container(
@@ -65,13 +64,9 @@ class LoginScreen extends GetView<LoginController> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // ================= LOGO =================
                             Container(
                               padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                // color: Colors.white.withOpacity(0.15),
-                                // shape: BoxShape.circle,
-                              ),
+                              decoration: const BoxDecoration(),
                               child: Image.asset(
                                 "assets/new/autopeepal.png",
                                 height: 150,
@@ -86,9 +81,7 @@ class LoginScreen extends GetView<LoginController> {
                                 },
                               ),
                             ),
-
                             const SizedBox(height: 25),
-
                             const Text(
                               "ATPL FLASHING",
                               style: TextStyle(
@@ -98,9 +91,7 @@ class LoginScreen extends GetView<LoginController> {
                                 letterSpacing: 2,
                               ),
                             ),
-
                             const SizedBox(height: 10),
-
                             Text(
                               "Vehicle ECU Flashing System",
                               style: TextStyle(
@@ -108,10 +99,7 @@ class LoginScreen extends GetView<LoginController> {
                                 fontSize: 14,
                               ),
                             ),
-
                             const SizedBox(height: 30),
-
-                            // Optional highlight card
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 20, vertical: 10),
@@ -246,7 +234,38 @@ class LoginScreen extends GetView<LoginController> {
                             ),
                           ),
 
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 15),
+
+                          // ================= REMEMBER ME =================
+                          Obx(() => GestureDetector(
+                            onTap: () => controller.rememberMe.value =
+                                !controller.rememberMe.value,
+                            child: Row(children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 20, height: 20,
+                                decoration: BoxDecoration(
+                                  color: controller.rememberMe.value
+                                      ? const Color(0xFFF97316)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: controller.rememberMe.value
+                                        ? const Color(0xFFF97316)
+                                        : Colors.white38,
+                                    width: 1.5)),
+                                child: controller.rememberMe.value
+                                    ? const Icon(Icons.check_rounded,
+                                        color: Colors.white, size: 13)
+                                    : null),
+                              const SizedBox(width: 10),
+                              const Text('Remember me',
+                                style: TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
+                            ]),
+                          )),
+
+                          const SizedBox(height: 25),
 
                           // ================= LOGIN BUTTON =================
                           Obx(
