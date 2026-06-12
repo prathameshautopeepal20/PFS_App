@@ -466,7 +466,7 @@ class CustomDrawer extends StatelessWidget {
     return Container(
       height: 120,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: const Color(0xFFF9772C),
+      color: const Color(0xFFEA580C),
       child: Row(
         mainAxisAlignment: isExpanded.value
             ? MainAxisAlignment.spaceBetween
