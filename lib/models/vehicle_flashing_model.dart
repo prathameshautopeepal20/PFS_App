@@ -18,7 +18,6 @@ class VehicleFlashingModel {
   bool ecuConnected;
   bool flashStarted;
 
-
   VehicleFlashingModel({
     required this.modelId,
     required this.modelName,
@@ -34,7 +33,6 @@ class VehicleFlashingModel {
     required this.ecuConnected,
     required this.flashStarted,
   });
-
 
   factory VehicleFlashingModel.empty() {
     return VehicleFlashingModel(
@@ -54,7 +52,6 @@ class VehicleFlashingModel {
     );
   }
 
-
   VehicleFlashingModel copyWith({
     String? modelId,
     String? modelName,
@@ -70,7 +67,6 @@ class VehicleFlashingModel {
     bool? ecuConnected,
     bool? flashStarted,
   }) {
-
     return VehicleFlashingModel(
       modelId: modelId ?? this.modelId,
       modelName: modelName ?? this.modelName,

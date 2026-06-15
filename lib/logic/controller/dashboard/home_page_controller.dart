@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -364,17 +365,137 @@ class HomePageController extends GetxController {
     }
   }
 
-  // ── Step 1: CheckDongle ───────────────────────────────────
+  // ════════════════════════════════════════════════════════
+  //  SCAN NETWORK — find dongle IPs on port 6888
+  //  Called by Find Dongle button in UI
+  // ════════════════════════════════════════════════════════
+  Future<List<String>> scanNetworkForDongles() async {
+    currStatus.value = 'Scanning network for dongles...';
+    final found = <String>[];
+    try {
+      final subnet = await _getWifiSubnet();
+      if (subnet == null) {
+        currStatus.value = 'WiFi not connected';
+        return [];
+      }
+
+      print('🔍 Scanning $subnet.1–254 on port 6888...');
+      const batchSize = 20;
+
+      for (int start = 1; start <= 254; start += batchSize) {
+        final end     = (start + batchSize - 1).clamp(1, 254);
+        final futures = <Future<String?>>[];
+        for (int i = start; i <= end; i++) {
+          futures.add(_tryPort('$subnet.$i', 6888));
+        }
+        final results = await Future.wait(futures);
+        for (final ip in results) {
+          if (ip != null) {
+            found.add(ip);
+            print('✅ Dongle found: $ip:6888');
+          }
+        }
+        currStatus.value =
+            'Scanning... ${(end / 254 * 100).toInt()}%'
+            ' — Found: ${found.length}';
+      }
+    } catch (e) {
+      print('❌ scanNetworkForDongles: $e');
+    } finally {
+      currStatus.value = '';
+    }
+    return found;
+  }
+
+  // ── Get WiFi subnet from network interfaces ───────────────
+  Future<String?> _getWifiSubnet() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4);
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('127.')) continue;
+          final parts = ip.split('.');
+          if (parts.length == 4) {
+            return '${parts[0]}.${parts[1]}.${parts[2]}';
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ _getWifiSubnet: $e');
+    }
+    return null;
+  }
+
+  // ── Try TCP connect on port with 400ms timeout ────────────
+  Future<String?> _tryPort(String ip, int port) async {
+    try {
+      final socket = await Socket.connect(ip, port,
+        timeout: const Duration(milliseconds: 400));
+      socket.destroy();
+      return ip;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Step 1: CheckDongle — with auto-scan fallback ─────────
   Future<bool> _checkDongle() async {
     bool value = false;
     currStatus.value = 'Checking Dongle Connection...';
     try {
       for (final device in tableInfo) {
-        // ✅ REAL: TCP connect to dongle IP:6888
+        // ── Try stored IP first ───────────────────────────
         device.isDongle = await _wifi.checkDongle(
-          device.ipAddress,
-          device.index,
-        );
+          device.ipAddress, device.index);
+
+        // ── If stored IP failed → scan network ────────────
+        if (!device.isDongle) {
+          print('⚠️ Stored IP ${device.ipAddress} failed'
+              ' → scanning network...');
+          currStatus.value =
+              'Dongle ${device.srNo} not at ${device.ipAddress}'
+              ' — scanning network...';
+
+          final subnet = await _getWifiSubnet();
+          if (subnet != null) {
+            // Scan full subnet for port 6888
+            const batchSize = 20;
+            bool foundNewIP = false;
+
+            for (int start = 1; start <= 254 && !foundNewIP;
+                start += batchSize) {
+              final end     = (start + batchSize - 1).clamp(1, 254);
+              final futures = <Future<String?>>[];
+              for (int i = start; i <= end; i++) {
+                // Skip already known IPs of other dongles
+                final ip = '$subnet.$i';
+                futures.add(_tryPort(ip, 6888));
+              }
+              final results = await Future.wait(futures);
+              for (final ip in results) {
+                if (ip != null) {
+                  // Check if this IP is not used by another dongle
+                  final alreadyUsed = tableInfo.any((d) =>
+                      d != device && d.ipAddress == ip && d.isDongle);
+                  if (!alreadyUsed) {
+                    // Try connecting via WiFiPlugin
+                    final ok = await _wifi.checkDongle(ip, device.index);
+                    if (ok) {
+                      print('✅ Dongle ${device.srNo} found at new IP: $ip'
+                          ' (was: ${device.ipAddress})');
+                      device.ipAddress = ip; // update IP for this session
+                      device.isDongle  = true;
+                      foundNewIP       = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
 
         if (device.isDongle) {
           device.dongleFlashingIndicator = true;
@@ -383,7 +504,9 @@ class HomePageController extends GetxController {
           device.dongleFlashingIndicator = false;
           device.dongleStatusColor       = Colors.red;
           device.ecuStatus  = false;
-          device.ecuStatus1 = 'Dongle ${device.srNo} not found.';
+          device.ecuStatus1 =
+              'Dongle ${device.srNo} not found.\n'
+              'Stored IP: ${device.ipAddress}';
         }
       }
       tableInfo.refresh();
@@ -404,7 +527,9 @@ class HomePageController extends GetxController {
         isResetDongleEnabled.value = false;
         value = true;
       }
-    } finally { currStatus.value = ''; }
+    } finally {
+      currStatus.value = '';
+    }
     return value;
   }
 

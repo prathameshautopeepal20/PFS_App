@@ -1,6 +1,8 @@
 // lib/views/screens/dashboard/home_page_screen.dart
 // Fully responsive — Expanded flex, never overflows
 
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:atpl_flashing_app/logic/controller/dashboard/home_page_controller.dart';
@@ -109,6 +111,9 @@ class _InfoBar extends StatelessWidget {
           value: sub?.ecuSubmodel.isNotEmpty == true
               ? '${sub!.ecuSubmodel[0].ecu}' : '—')),
         const SizedBox(width: 10),
+        // Find Dongle — scans WiFi network for dongle IP
+        _FindDongleBtn(controller: controller),
+        const SizedBox(width: 8),
         Obx(() => _OrangeBtn(
           label: 'Reset Dongle',
           enabled: controller.isResetDongleEnabled.value,
@@ -608,6 +613,398 @@ class _BottomBar extends StatelessWidget {
             onTap: controller.reset)),
         ]),
       ]));
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  Find Dongle Button — scans WiFi and shows found IPs
+// ════════════════════════════════════════════════════════════
+class _FindDongleBtn extends StatelessWidget {
+  final HomePageController controller;
+  const _FindDongleBtn({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showScanSheet(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: _cOrange, width: 1.5),
+          borderRadius: BorderRadius.circular(8)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.wifi_find_rounded, color: _cOrange, size: 15),
+          SizedBox(width: 6),
+          Text('Find Dongle',
+            style: TextStyle(
+              color: _cOrange, fontSize: 12,
+              fontWeight: FontWeight.w700)),
+        ]),
+      ),
+    );
+  }
+
+  void _showScanSheet(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DongleScanDialog(controller: controller),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  Dongle Scan Dialog
+// ════════════════════════════════════════════════════════════
+class _DongleScanDialog extends StatefulWidget {
+  final HomePageController controller;
+  const _DongleScanDialog({required this.controller});
+
+  @override
+  State<_DongleScanDialog> createState() => _DongleScanDialogState();
+}
+
+class _DongleScanDialogState extends State<_DongleScanDialog> {
+  List<String> _foundIPs = [];
+  bool   _scanning = false;
+  bool   _done     = false;
+  double _progress = 0.0;
+  String _status   = 'Starting scan...';
+
+  @override
+  void initState() {
+    super.initState();
+    _startScan();
+  }
+
+  Future<void> _startScan() async {
+    setState(() {
+      _scanning = true;
+      _done     = false;
+      _foundIPs = [];
+      _progress = 0.0;
+      _status   = 'Getting WiFi info...';
+    });
+
+    try {
+      // Get local IP to find subnet
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4);
+
+      String? subnet;
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          // Skip loopback
+          if (ip.startsWith('127.')) continue;
+          // Take first LAN IP
+          final parts = ip.split('.');
+          if (parts.length == 4) {
+            subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
+            break;
+          }
+        }
+        if (subnet != null) break;
+      }
+
+      if (subnet == null) {
+        setState(() {
+          _status   = 'Could not detect WiFi IP.\nMake sure WiFi is connected.';
+          _scanning = false;
+          _done     = true;
+        });
+        return;
+      }
+
+      setState(() => _status = 'Scanning $subnet.1–254 on port 6888...');
+
+      final found  = <String>[];
+      const total  = 254;
+      const batch  = 20; // scan 20 IPs at a time
+
+      for (int start = 1; start <= total; start += batch) {
+        if (!mounted) return;
+
+        final end     = (start + batch - 1).clamp(1, total);
+        final futures = <Future<String?>>[];
+
+        for (int i = start; i <= end; i++) {
+          futures.add(_tryConnect('$subnet.$i'));
+        }
+
+        final results = await Future.wait(futures);
+        for (final ip in results) {
+          if (ip != null) {
+            found.add(ip);
+            if (mounted) setState(() => _foundIPs = List.from(found));
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _progress = end / total;
+            _status   = 'Scanning... ${(end / total * 100).toInt()}%'
+                '  —  Found: ${found.length}';
+          });
+        }
+      }
+
+      setState(() {
+        _scanning = false;
+        _done     = true;
+        _foundIPs = found;
+        _status   = found.isEmpty
+            ? 'No dongles found on $subnet.x port 6888'
+            : '✅ Found ${found.length} dongle(s)';
+      });
+
+    } catch (e) {
+      setState(() {
+        _scanning = false;
+        _done     = true;
+        _status   = 'Scan error: $e';
+      });
+    }
+  }
+
+  // Try TCP connect on port 6888 with 400ms timeout
+  Future<String?> _tryConnect(String ip) async {
+    try {
+      final socket = await Socket.connect(ip, 6888,
+        timeout: const Duration(milliseconds: 400));
+      socket.destroy();
+      return ip;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // User selects an IP → update dongle row IP
+  void _selectIP(String ip) {
+    // Update all unconnected dongles with found IP
+    // Or show which dongle to assign
+    Navigator.of(context).pop();
+    Get.snackbar(
+      '✅ Dongle Found',
+      'IP: $ip — Update this IP in server for dongle registration.',
+      backgroundColor: _cPass,
+      colorText: _cWhite,
+      duration: const Duration(seconds: 5),
+      snackPosition: SnackPosition.BOTTOM,
+    );
+
+    // Print to console for developer
+    print('🔍 Dongle found at: $ip — Update dongle IP in server');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 420,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [_cSurface, _cSurface2],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _cBorder),
+          boxShadow: const [BoxShadow(
+            color: Colors.black54, blurRadius: 24)]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [_cOrange, _cOrangD, _cOrangDD]),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16))),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18, vertical: 14),
+              child: Row(children: [
+                const Icon(Icons.wifi_find_rounded,
+                  color: _cWhite, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Scanning for Dongles',
+                  style: TextStyle(
+                    color: _cWhite, fontSize: 15,
+                    fontWeight: FontWeight.bold))),
+                if (!_scanning)
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Icon(Icons.close_rounded,
+                      color: _cWhite, size: 20)),
+              ])),
+
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status text
+                  Row(children: [
+                    if (_scanning)
+                      const SizedBox(
+                        width: 12, height: 12,
+                        child: CircularProgressIndicator(
+                          color: _cOrange, strokeWidth: 2))
+                    else
+                      Icon(
+                        _foundIPs.isEmpty ? Icons.error_outline_rounded
+                            : Icons.check_circle_rounded,
+                        color: _foundIPs.isEmpty ? _cFail : _cPass,
+                        size: 14),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_status,
+                      style: const TextStyle(
+                        color: _cWhite70, fontSize: 11))),
+                  ]),
+                  const SizedBox(height: 10),
+
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _scanning ? _progress : 1.0,
+                      minHeight: 7,
+                      color: _cOrange,
+                      backgroundColor: _cBorder)),
+                  const SizedBox(height: 4),
+                  Text('${(_progress * 100).toInt()}%',
+                    style: const TextStyle(
+                      color: _cWhite40, fontSize: 10)),
+
+                  const SizedBox(height: 14),
+
+                  // Results
+                  if (_done) ...[
+                    if (_foundIPs.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0x15EF4444),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _cFail.withOpacity(0.3))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text('No dongles found on port 6888.',
+                              style: TextStyle(
+                                color: _cFail, fontSize: 12,
+                                fontWeight: FontWeight.bold)),
+                            SizedBox(height: 8),
+                            Text('Check:',
+                              style: TextStyle(
+                                color: _cWhite70, fontSize: 11,
+                                fontWeight: FontWeight.w600)),
+                            SizedBox(height: 4),
+                            Text('• Dongle is powered ON (LED blinking)',
+                              style: TextStyle(color: _cWhite40, fontSize: 11)),
+                            Text('• Dongle connected to same WiFi as laptop',
+                              style: TextStyle(color: _cWhite40, fontSize: 11)),
+                            Text('• Dongle port is 6888',
+                              style: TextStyle(color: _cWhite40, fontSize: 11)),
+                            Text('• Windows Firewall allows port 6888',
+                              style: TextStyle(color: _cWhite40, fontSize: 11)),
+                          ]))
+                    else ...[
+                      Text('${_foundIPs.length} Dongle(s) Found — Tap to copy IP:',
+                        style: const TextStyle(
+                          color: _cPass, fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      ..._foundIPs.map((ip) => GestureDetector(
+                        onTap: () => _selectIP(ip),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0x15F97316),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _cOrange)),
+                          child: Row(children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0x20F97316),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _cOrange, width: 1.5)),
+                              child: const Icon(Icons.usb_rounded,
+                                color: _cOrange, size: 16)),
+                            const SizedBox(width: 12),
+                            Expanded(child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(ip,
+                                  style: const TextStyle(
+                                    color: _cWhite,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace')),
+                                const Text('Port 6888 — Dongle responding ✅',
+                                  style: TextStyle(
+                                    color: _cWhite40, fontSize: 10)),
+                              ])),
+                            const Icon(Icons.copy_rounded,
+                              color: _cOrange, size: 16),
+                          ]),
+                        ),
+                      )).toList(),
+                    ],
+                    const SizedBox(height: 14),
+                  ],
+
+                  // Buttons
+                  Row(children: [
+                    if (_done) ...[
+                      Expanded(child: GestureDetector(
+                        onTap: _startScan,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _cOrange),
+                            borderRadius: BorderRadius.circular(8)),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.refresh_rounded,
+                                color: _cOrange, size: 15),
+                              SizedBox(width: 6),
+                              Text('Rescan',
+                                style: TextStyle(
+                                  color: _cOrange, fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
+                            ])),
+                      )),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(child: GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        decoration: BoxDecoration(
+                          color: _cBorder,
+                          borderRadius: BorderRadius.circular(8)),
+                        child: const Center(child: Text('Close',
+                          style: TextStyle(
+                            color: _cWhite70, fontSize: 12,
+                            fontWeight: FontWeight.w600)))),
+                    )),
+                  ]),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
