@@ -330,6 +330,10 @@ class CommController extends GetxController {
         socket.add(finalPacket);
         await socket.flush();
 
+        // ⚡ Give socket event loop time to fire _handleData before reading
+        // Without this, _readExactBytes polls empty buffer before data arrives
+        await Future.delayed(const Duration(milliseconds: 50));
+
         print("📥 Waiting for WiFi response...");
         return await getWifiResponse();
       }
@@ -512,7 +516,8 @@ class CommController extends GetxController {
     final DateTime startTime = DateTime.now();
 
     while (_buffer.length < length) {
-      await Future.delayed(const Duration(milliseconds: 1));
+      // Use 5ms delay — enough to yield to socket event loop
+      await Future.delayed(const Duration(milliseconds: 5));
 
       if (DateTime.now().difference(startTime).inSeconds > timeoutSec) {
         print(

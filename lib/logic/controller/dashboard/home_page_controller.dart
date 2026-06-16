@@ -447,8 +447,29 @@ class HomePageController extends GetxController {
     try {
       for (final device in tableInfo) {
         // ── Try stored IP first ───────────────────────────
+        // Get TX/RX headers from EcuSubmodel (from server)
+        final sub    = device.selectedSubModel;
+        final ecuSub = sub?.ecuSubmodel.isNotEmpty == true
+            ? sub!.ecuSubmodel[0] : null;
+        final txHdrRaw = ecuSub?.txHeader           ?? '7DF';
+        final rxHdr    = ecuSub?.rxHeader           ?? '7E8';
+        final protoHex = ecuSub?.protocolAutopeepal ?? '02';
+
+        // Debug — show exactly what server returned
+        print('🔧 Server values: TX=$txHdrRaw RX=$rxHdr proto=$protoHex');
+        print('🔧 ecuSub: ${ecuSub?.toJson()}');
+
+        // If server returns 7DF (broadcast) → use 7E0 (direct ECU address)
+        // 7DF = OBD2 broadcast, 7E0 = direct ECU address
+        // From .NET image: TX=7E0h works, 7DF does not
+        final txHdr = (txHdrRaw == '7DF' || txHdrRaw == '07DF')
+            ? '7E0' : txHdrRaw;
+
         device.isDongle = await _wifi.checkDongle(
-          device.ipAddress, device.index);
+          device.ipAddress, device.index,
+          txHeader: txHdr,
+          rxHeaderMask: rxHdr,
+          protocolHex: protoHex);
 
         // ── If stored IP failed → scan network ────────────
         if (!device.isDongle) {
@@ -540,12 +561,7 @@ class HomePageController extends GetxController {
     try {
       for (final device in tableInfo) {
         // ✅ REAL: UDSDiagnostic.readParameters() → ESN
-        final res = await _wifi.getESN(
-          device.ipAddress,
-          device.index,
-          _ecuMap,
-          _pids,
-        );
+        final res = await _wifi.getESN(device.ipAddress, device.index, _pids);
 
         if (res[0] == 'true') {
           device.ecuSrNo              = res[1];
@@ -591,12 +607,7 @@ class HomePageController extends GetxController {
 
       for (final device in tableInfo) {
         // ✅ REAL: UDSDiagnostic.readParameters() → HW Part No
-        final res = await _wifi.getHW(
-          device.ipAddress,
-          device.index,
-          _ecuMap,
-          _pids,
-        );
+        final res = await _wifi.getHW(device.ipAddress, device.index, _pids);
 
         if (res[0] == 'true') {
           device.hardwarePartNumber = res[1];
@@ -672,12 +683,7 @@ class HomePageController extends GetxController {
 
       for (final device in tableInfo) {
         // ✅ REAL: UDSDiagnostic.readParameters() → SW Version
-        final res = await _wifi.getSW(
-          device.ipAddress,
-          device.index,
-          _ecuMap,
-          _pids,
-        );
+        final res = await _wifi.getSW(device.ipAddress, device.index, _pids);
 
         if (res[0] == 'true') {
           device.swVersionBefore   = res[1];
@@ -720,12 +726,7 @@ class HomePageController extends GetxController {
       for (final device in tableInfo) {
         if (!device.swMatch) {
           // ✅ REAL: UDSDiagnostic.readParameters() → CalId
-          final res = await _wifi.getCalId(
-            device.ipAddress,
-            device.index,
-            _ecuMap,
-            _pids,
-          );
+          final res = await _wifi.getCalId(device.ipAddress, device.index, _pids);
 
           if (res[0] == 'true') {
             device.calIdBefore       = res[1];
@@ -761,12 +762,7 @@ class HomePageController extends GetxController {
 
       for (final device in tableInfo) {
         // ✅ REAL: UDSDiagnostic.readParameters() → CVN
-        final res = await _wifi.getCVN(
-          device.ipAddress,
-          device.index,
-          _ecuMap,
-          _pids,
-        );
+        final res = await _wifi.getCVN(device.ipAddress, device.index, _pids);
 
         if (res[0] == 'true') {
           device.cvnBefore         = res[1];
@@ -793,7 +789,7 @@ class HomePageController extends GetxController {
     currStatus.value = 'Reading Calibration Id...';
     try {
       for (final device in tableInfo) {
-        final res = await _wifi.getCalId(device.ipAddress, device.index, _ecuMap, _pids);
+        final res = await _wifi.getCalId(device.ipAddress, device.index, _pids);
         if (res[0] == 'true') device.calIdBefore = res[1];
       }
       tableInfo.refresh();
@@ -804,7 +800,7 @@ class HomePageController extends GetxController {
     currStatus.value = 'Reading CVN...';
     try {
       for (final device in tableInfo) {
-        final res = await _wifi.getCVN(device.ipAddress, device.index, _ecuMap, _pids);
+        final res = await _wifi.getCVN(device.ipAddress, device.index, _pids);
         if (res[0] == 'true') device.cvnBefore = res[1];
       }
       tableInfo.refresh();
@@ -887,14 +883,16 @@ class HomePageController extends GetxController {
       // Uses ap_diagnostic → UDSDiagnostic.flashInterpreter()
       // Uses ecu_seedkey → ECUCalculateSeedkey (inside flashInterpreter)
       final flashResult = await _wifi.startECUFlashing(
-        seqFile:      device.seqFile,
-        jsonFile:     device.jsonFile,
-        ip:           device.ipAddress,
-        index:        device.index,
-        txHeader:     ecuSub?.completeDataset?.swPartNo ?? '',
-        rxHeader:     '',
-        protocol:     'ISO15765_500KB_11BIT_CAN',
-        seedkeyAlgo:  'RE_SEEDKEY_EPM44',
+        ip:             device.ipAddress,
+        index:          device.index,
+        seqFileContent: device.seqFile,
+        hexFileContent: device.jsonFile,
+        seedKeyIndex:   ecuSub?.seedkeyAlgoValue ?? 'RE_SEEDKEY_EPM44',
+        txHeader:       ecuSub?.txHeader    ?? '7DF',
+        rxHeader:       ecuSub?.rxHeader    ?? '7E8',
+        protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
+        onProgress:     (p) => device.progress = p,
+        onStatus:       (s) => currStatus.value = s,
       );
 
       final result = flashResult.isNotEmpty ? flashResult[0] : 'ERROR';
@@ -910,13 +908,13 @@ class HomePageController extends GetxController {
         device.status          = 'Flashing completed';
 
         // ✅ REAL: Read after-flash values
-        final calAfter = await _wifi.getCalId(device.ipAddress, device.index, _ecuMap, _pids);
+        final calAfter = await _wifi.getCalId(device.ipAddress, device.index, _pids);
         if (calAfter[0] == 'true') device.printCalId = calAfter[1];
 
-        final cvnAfter = await _wifi.getCVN(device.ipAddress, device.index, _ecuMap, _pids);
+        final cvnAfter = await _wifi.getCVN(device.ipAddress, device.index, _pids);
         if (cvnAfter[0] == 'true') device.cvn = cvnAfter[1];
 
-        final swAfter = await _wifi.getSW(device.ipAddress, device.index, _ecuMap, _pids);
+        final swAfter = await _wifi.getSW(device.ipAddress, device.index, _pids);
         if (swAfter[0] == 'true') device.swVersionAfter = swAfter[1];
 
         device.ecuSrNoAfter = device.ecuSrNo;

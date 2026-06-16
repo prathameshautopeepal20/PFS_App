@@ -1,16 +1,16 @@
 // lib/logic/controller/dashboard/individual_flash_controller.dart
 //
 // Mirrors IndivisualFlashViewModel.cs EXACTLY:
-//  ✅ Init:   ShowRegisteredDongleList → GetFlashDetail → GetParameters → GetPid
-//  ✅ GetPid(type): finds PID by type ESN/HWPN/ESWV/CALID/CVN from parameters
-//  ✅ CheckEcuStatus: resets only non-flashing rows
-//  ✅ CheckDongle → CheckECU → CheckECUHW → CheckFlashingStatus → CheckECUSW → CheckCalId → CheckCVN
-//  ✅ CheckCalId: calibration_dataset OR complete_dataset match → sets file_type
-//  ✅ CheckCVN: enables play button orange after check
-//  ✅ StartIndividualFlash: assigns files by fileType
-//  ✅ StartFlash: reads calIdBefore/cvnBefore if empty, timer, real WiFiPlugin flash
-//  ✅ GetPdfContent: reads HW/SW/CalId/CVN/ESN after flash → POST multipart
-//  ✅ PrintCommand: resets entire row in finally block
+//   Init:   ShowRegisteredDongleList → GetFlashDetail → GetParameters → GetPid
+//   GetPid(type): finds PID by type ESN/HWPN/ESWV/CALID/CVN from parameters
+//   CheckEcuStatus: resets only non-flashing rows
+//   CheckDongle → CheckECU → CheckECUHW → CheckFlashingStatus → CheckECUSW → CheckCalId → CheckCVN
+//   CheckCalId: calibration_dataset OR complete_dataset match → sets file_type
+//   CheckCVN: enables play button orange after check
+//   StartIndividualFlash: assigns files by fileType
+//   StartFlash: reads calIdBefore/cvnBefore if empty, timer, real WiFiPlugin flash
+//   GetPdfContent: reads HW/SW/CalId/CVN/ESN after flash → POST multipart
+//   PrintCommand: resets entire row in finally block
 
 import 'dart:async';
 import 'dart:convert';
@@ -380,7 +380,7 @@ class IndividualFlashController extends GetxController {
       for (final device in tableInfo) {
         if (device.dongleFlashingIndicator && !device.isflashing) {
           final pids = _getPidByType('ESN', device.selectedSubModel);
-          final res  = await _wifi.getESN(device.ipAddress, device.index, {}, pids);
+          final res  = await _wifi.getESN(device.ipAddress, device.index, _pids);
           if (res[0] == 'true') {
             device.ecuFlashingIndicator = true;
             device.ecuSrNo              = res[1];
@@ -405,7 +405,7 @@ class IndividualFlashController extends GetxController {
       for (final device in tableInfo) {
         if (device.ecuFlashingIndicator && !device.isflashing) {
           final pids = _getPidByType('HWPN', device.selectedSubModel);
-          final res  = await _wifi.getHW(device.ipAddress, device.index, {}, pids);
+          final res  = await _wifi.getHW(device.ipAddress, device.index, _pids);
           final sub        = device.selectedSubModel;
           final expectedHw = sub?.ecuSubmodel.isNotEmpty == true
               ? (sub!.ecuSubmodel[0].completeDataset?.swPartNo ?? sub.hwPartNo) : '';
@@ -460,7 +460,7 @@ class IndividualFlashController extends GetxController {
       for (final device in tableInfo) {
         if (device.isEcuAvailable && !device.isflashing) {
           final pids       = _getPidByType('ESWV', device.selectedSubModel);
-          final res        = await _wifi.getSW(device.ipAddress, device.index, {}, pids);
+          final res        = await _wifi.getSW(device.ipAddress, device.index, _pids);
           final sub        = device.selectedSubModel;
           final expectedSw = sub?.ecuSubmodel.isNotEmpty == true
               ? sub!.ecuSubmodel[0].completeDataset?.swVersion ?? '' : '';
@@ -487,7 +487,7 @@ class IndividualFlashController extends GetxController {
       for (final device in tableInfo) {
         if (device.isEcuAvailable && device.selectedSubModel != null && !device.isflashing) {
           final pids       = _getPidByType('CALID', device.selectedSubModel);
-          final res        = await _wifi.getCalId(device.ipAddress, device.index, {}, pids);
+          final res        = await _wifi.getCalId(device.ipAddress, device.index, _pids);
           final sub        = device.selectedSubModel!;
           final calDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].callibrationDataset : null;
           final comDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].completeDataset : null;
@@ -535,7 +535,7 @@ class IndividualFlashController extends GetxController {
       for (final device in tableInfo) {
         if (device.isEcuAvailable && device.selectedSubModel != null && !device.isflashing) {
           final pids       = _getPidByType('CVN', device.selectedSubModel);
-          final res        = await _wifi.getCVN(device.ipAddress, device.index, {}, pids);
+          final res        = await _wifi.getCVN(device.ipAddress, device.index, _pids);
           final sub        = device.selectedSubModel!;
           final calDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].callibrationDataset : null;
           final comDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].completeDataset : null;
@@ -610,12 +610,12 @@ class IndividualFlashController extends GetxController {
       // Read before values if missing (mirrors .NET StartFlash)
       if (device.calIdBefore.isEmpty) {
         final pids = _getPidByType('CALID', device.selectedSubModel);
-        final res  = await _wifi.getCalId(device.ipAddress, device.index, {}, pids);
+        final res  = await _wifi.getCalId(device.ipAddress, device.index, _pids);
         if (res[0] == 'true') device.calIdBefore = res[1];
       }
       if (device.cvnBefore.isEmpty) {
         final pids = _getPidByType('CVN', device.selectedSubModel);
-        final res  = await _wifi.getCVN(device.ipAddress, device.index, {}, pids);
+        final res  = await _wifi.getCVN(device.ipAddress, device.index, _pids);
         if (res[0] == 'true') device.cvnBefore = res[1];
       }
 
@@ -654,14 +654,16 @@ class IndividualFlashController extends GetxController {
       final sub     = device.selectedSubModel;
       final ecuSub  = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
       final flashResult = await _wifi.startECUFlashing(
-        seqFile:     device.seqFile,
-        jsonFile:    device.jsonFile,
-        ip:          device.ipAddress,
-        index:       device.index,
-        txHeader:    '',
-        rxHeader:    '',
-        protocol:    'ISO15765_500KB_11BIT_CAN',
-        seedkeyAlgo: 'RE_SEEDKEY_EPM44',
+        ip:             device.ipAddress,
+        index:          device.index,
+        seqFileContent: device.seqFile,
+        hexFileContent: device.jsonFile,
+        seedKeyIndex:   ecuSub?.seedkeyAlgoValue ?? 'RE_SEEDKEY_EPM44',
+        txHeader:       ecuSub?.txHeader    ?? '7DF',
+        rxHeader:       ecuSub?.rxHeader    ?? '7E8',
+        protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
+        onProgress:     (p) => device.progress = p,
+        onStatus:       (s) => currStatus.value = s,
       );
 
       flashTimer.cancel(); progressTimer.cancel(); sw.stop();
@@ -680,7 +682,7 @@ class IndividualFlashController extends GetxController {
       }
 
       // GeneratePdfWrapper (mirrors .NET)
-      await _getPdfContentAndPost(device, flashResult);
+      await _getPdfContentAndPost(device, flashResult as List<String>);
 
       device.status       = result == 'NOERROR' ? 'Flashing completed' : result;
       device.flashPercent = result == 'NOERROR' ? '100.0%' : device.flashPercent;
@@ -727,28 +729,23 @@ class IndividualFlashController extends GetxController {
               sub.ecuSubmodel[0].completeDataset?.swPartNo ?? 'NA') : 'NA';
 
       // ✅ Read HW after flash (mirrors .NET)
-      final hwRes = await _wifi.getHW(device.ipAddress, device.index, {},
-          _getPidByType('HWPN', device.selectedSubModel));
+      final hwRes = await _wifi.getHW(device.ipAddress, device.index, _pids);
       if (hwRes[0] == 'true') device.hardwarePartNumber = hwRes[1];
 
       // ✅ Read SW after flash
-      final swRes = await _wifi.getSW(device.ipAddress, device.index, {},
-          _getPidByType('ESWV', device.selectedSubModel));
+      final swRes = await _wifi.getSW(device.ipAddress, device.index, _pids);
       if (swRes[0] == 'true') device.swVersionAfter = swRes[1];
 
       // ✅ Read CalId after flash
-      final calRes = await _wifi.getCalId(device.ipAddress, device.index, {},
-          _getPidByType('CALID', device.selectedSubModel));
+      final calRes = await _wifi.getCalId(device.ipAddress, device.index, _pids);
       if (calRes[0] == 'true') device.printCalId = calRes[1];
 
       // ✅ Read CVN after flash
-      final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, {},
-          _getPidByType('CVN', device.selectedSubModel));
+      final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, _pids);
       if (cvnRes[0] == 'true') device.cvn = cvnRes[1];
 
       // ✅ Read ESN after flash
-      final esnRes = await _wifi.getESN(device.ipAddress, device.index, {},
-          _getPidByType('ESN', device.selectedSubModel));
+      final esnRes = await _wifi.getESN(device.ipAddress, device.index, _pids);
       if (esnRes[0] == 'true') device.ecuSrNoAfter = esnRes[1];
 
       tableInfo.refresh();

@@ -71,7 +71,12 @@ class EcuSubmodel {
   final DatasetFile? callibrationDataset;
   final String completeStatus;
   final String calibrationStatus;
-  final List<dynamic> pidDatasets; // ← ADDED
+  final List<dynamic> pidDatasets;
+  final String txHeader;
+  final String rxHeader;
+  final String protocolName;
+  final String protocolAutopeepal;
+  final String seedkeyAlgoValue;   // from ecu.seedkeyalgo_fn_index.value
 
   EcuSubmodel({
     required this.id,
@@ -80,8 +85,21 @@ class EcuSubmodel {
     this.callibrationDataset,
     required this.completeStatus,
     required this.calibrationStatus,
-    this.pidDatasets = const [], // ← ADDED
+    this.pidDatasets        = const [],
+    this.txHeader           = '7DF',
+    this.rxHeader           = '7E8',
+    this.protocolName       = 'ISO15765_500KB_11BIT_CAN',
+    this.protocolAutopeepal = '02',
+    this.seedkeyAlgoValue   = 'RE_SEEDKEY_EPM44',
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'ecu': ecu,
+    'txHeader': txHeader, 'rxHeader': rxHeader,
+    'protocolName': protocolName,
+    'protocolAutopeepal': protocolAutopeepal,
+    'seedkeyAlgoValue': seedkeyAlgoValue,
+  };
 
   factory EcuSubmodel.fromJson(Map<String, dynamic> j) => EcuSubmodel(
         id: j['id'] ?? 0,
@@ -92,9 +110,20 @@ class EcuSubmodel {
         callibrationDataset: j['callibration_dataset'] != null
             ? DatasetFile.fromJson(j['callibration_dataset'])
             : null,
-        completeStatus: j['complete_status'] ?? '',
+        completeStatus:    j['complete_status']    ?? '',
         calibrationStatus: j['calibration_status'] ?? '',
-        pidDatasets: j['pid_datasets'] as List? ?? [], // ← ADDED
+        pidDatasets:       j['pid_datasets'] as List? ?? [],
+        txHeader:          j['tx_header']     ?? j['ecu_tx_header']  ?? '7DF',
+        rxHeader:          j['rx_header']     ?? j['ecu_rx_header']  ?? '7E8',
+        protocolName:      j['protocol']?['name']
+                        ?? j['protocol_name']
+                        ?? 'ISO15765_500KB_11BIT_CAN',
+        protocolAutopeepal: j['protocol']?['autopeepal']
+                         ?? j['protocol_autopeepal']
+                         ?? '02',
+        seedkeyAlgoValue:   j['seedkeyalgo_fn_index']?['value']
+                         ?? j['seedkey_algo']
+                         ?? 'RE_SEEDKEY_EPM44',
       );
 }
 
@@ -130,7 +159,8 @@ class SubModel {
   final List<EcuSubmodel> ecuSubmodel;
   final List<StationInfo> station;
   final int?  waitAfterFlash;
-  final bool  scanQrCode;       // ← ADDED: from scan_qr_code API field
+  final bool  scanQrCode;      // ← ADDED: scan_qr_code
+  final String scanQrCodeData; // ← ADDED: scan_qr_code_data
 
   SubModel({
     required this.id,
@@ -140,7 +170,8 @@ class SubModel {
     required this.ecuSubmodel,
     required this.station,
     this.waitAfterFlash,
-    this.scanQrCode = false,    // ← ADDED
+    this.scanQrCode     = false,
+    this.scanQrCodeData = '',
   });
 
   factory SubModel.fromJson(Map<String, dynamic> j) => SubModel(
@@ -154,8 +185,9 @@ class SubModel {
         station: (j['station'] as List? ?? [])
             .map((e) => StationInfo.fromJson(e))
             .toList(),
-        waitAfterFlash: j['wait_after_flash'] as int?,
-        scanQrCode: j['scan_qr_code'] as bool? ?? false, // ← ADDED
+        waitAfterFlash:  j['wait_after_flash'] as int?,
+        scanQrCode:      j['scan_qr_code']      as bool?   ?? false,
+        scanQrCodeData:  j['scan_qr_code_data'] as String? ?? '',
       );
 }
 

@@ -1,257 +1,317 @@
 // lib/services/wifi_plugin.dart
+// Uses CommController.sendCommand() with correct .NET CRC-16/Kermit
+// Bypasses DongleComm setup commands (wrong CRC) — uses raw bytes instead
 
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
+import 'package:ap_diagnostic/models/flashingMtrixModel.dart';
+import 'package:ap_diagnostic/models/readParameterPIDModel.dart';
+import 'package:ap_diagnostic/structure/flash_structures.dart';
+import 'package:ap_diagnostic/usd_diagnostic.dart';
 import 'package:ap_dongle_comm/utils/commController.dart';
 import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
-import 'package:ap_diagnostic/usd_diagnostic.dart';
-import 'package:ap_diagnostic/models/readParameterPIDModel.dart';
-import 'package:ap_diagnostic/models/flashingMtrixModel.dart';
-import 'package:ap_diagnostic/structure/flash_structures.dart';
-import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
+import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
+
+class _Slot {
+  CommController ctrl     = CommController();
+  DongleComm?    dongle;
+  UDSDiagnostic? diag;
+  String         ip       = '';
+  String         txHeader = '07DF';
+  String         rxHeader = '07E8';
+  int            proto    = 0x02;
+  bool           ready    = false;
+}
 
 class WiFiPlugin {
   WiFiPlugin._();
   static final WiFiPlugin instance = WiFiPlugin._();
 
-  final Map<int, CommController> _controllers = {};
-  final Map<int, DongleComm>     _dongles     = {};
-  final Map<int, UDSDiagnostic>  _diagnostics = {};
-  final Map<String, double>      flashPercentMap = {};
+  final Map<int, _Slot>     _slots = {};
+  final Map<String, double> flashPercentMap = {};
 
-  // ── Init: pre-create 8 controller slots ──────────────────
   Future<void> initSockets() async {
-    for (int i = 1; i <= 8; i++) {
-      if (!_controllers.containsKey(i)) {
-        _controllers[i] = CommController();
-      }
-    }
+    for (int i = 1; i <= 8; i++) _slots[i] = _Slot();
     print('✅ [WiFiPlugin] Sockets initialized');
   }
 
-  // ── Close all sockets ────────────────────────────────────
   Future<void> closeSockets() async {
-    for (final ctrl in _controllers.values) {
-      try { await ctrl.disconnect(); } catch (_) {}
+    for (final s in _slots.values) {
+      try { await s.ctrl.disconnect(); } catch (_) {}
+      s.ready = false;
     }
-    _dongles.clear();
-    _diagnostics.clear();
-    print('✅ [WiFiPlugin] All sockets closed');
+    print('✅ [WiFiPlugin] Closed');
   }
 
-  // ── Connect to dongle via TCP WiFi on port 6888 ───────────
-  Future<bool> checkDongle(String ip, int index) async {
+  // ════════════════════════════════════════════════════════════
+  //  checkDongle — TCP connect only (mirrors .NET CheckClient_1)
+  // ════════════════════════════════════════════════════════════
+  Future<bool> checkDongle(String ip, int index, {
+    String txHeader     = '7DF',
+    String rxHeaderMask = '7E8',
+    String protocolHex  = '02',
+  }) async {
     try {
-      final ctrl = _getOrCreate(index);
-      if (ctrl.isConnected.value) {
-        await ctrl.disconnect();
+      final txH   = txHeader.length.isOdd     ? '0$txHeader'     : txHeader;
+      final rxH   = rxHeaderMask.length.isOdd ? '0$rxHeaderMask' : rxHeaderMask;
+      final proto = int.tryParse(protocolHex, radix: 16) ?? 0x02;
+
+      final slot = _slots[index]!;
+      if (slot.ctrl.isConnected.value) {
+        await slot.ctrl.disconnect();
         await Future.delayed(const Duration(milliseconds: 50));
       }
 
-      // CommController.connectWifi — Connectivity.wiFi (capital F)
-      await ctrl.connectWifi(
-        host: ip,
-        port: 6888,
-        selectedType: Connectivity.wiFi,
-      );
+      print('🌐 CheckClient_$index: connecting $ip:6888...');
+      await slot.ctrl.connectWifi(
+        host: ip, port: 6888, selectedType: Connectivity.wiFi);
 
-      if (ctrl.isConnected.value) {
-        // DongleComm requires isChannel + optional channelId
-        final dongle = DongleComm(comm: ctrl, isChannel: false);
-        // UDSDiagnostic requires DongleComm + ECUCalculateSeedkey
-        final seedkey    = ECUCalculateSeedkey();
-        final diagnostic = UDSDiagnostic(dongle, seedkey);
+      if (!slot.ctrl.isConnected.value) return false;
 
-        _dongles[index]     = dongle;
-        _diagnostics[index] = diagnostic;
-        print('✅ [WiFiPlugin] Dongle $index connected @ $ip:6888');
-        return true;
-      }
+      final protocol = Protocol.values.firstWhere(
+          (p) => p.value == proto,
+          orElse: () => Protocol.ISO15765_500KB_11BIT_CAN);
+      final dongle = DongleComm(comm: slot.ctrl, isChannel: false);
+      dongle.protocol = protocol;
+
+      slot.dongle   = dongle;
+      slot.diag     = UDSDiagnostic(dongle, ECUCalculateSeedkey());
+      slot.ip       = ip;
+      slot.txHeader = txH;
+      slot.rxHeader = rxH;
+      slot.proto    = proto;
+      slot.ready    = true;
+
+      print('✅ [WiFiPlugin] Dongle $index connected @ $ip:6888');
+      return true;
+    } catch (e) {
+      print('❌ checkDongle[$index]: $e');
       return false;
-    } catch (e) {
-      print('❌ [WiFiPlugin] checkDongle[$index] $ip: $e');
-      return false;
     }
   }
 
-  // ── Get ECU Serial Number ────────────────────────────────
-  Future<List<String>> getESN(
-    String ip, int index,
-    Map<String, dynamic> ecu, List<dynamic> pids,
-  ) async => _readPid(index, pids);
-
-  // ── Get Hardware Part Number ─────────────────────────────
-  Future<List<String>> getHW(
-    String ip, int index,
-    Map<String, dynamic> ecu, List<dynamic> pids,
-  ) async => _readPid(index, pids);
-
-  // ── Get Software Version ─────────────────────────────────
-  Future<List<String>> getSW(
-    String ip, int index,
-    Map<String, dynamic> ecu, List<dynamic> pids,
-  ) async => _readPid(index, pids);
-
-  // ── Get Calibration ID ───────────────────────────────────
-  Future<List<String>> getCalId(
-    String ip, int index,
-    Map<String, dynamic> ecu, List<dynamic> pids,
-  ) async => _readPid(index, pids);
-
-  // ── Get CVN ──────────────────────────────────────────────
-  Future<List<String>> getCVN(
-    String ip, int index,
-    Map<String, dynamic> ecu, List<dynamic> pids,
-  ) async => _readPid(index, pids);
-
-  // ── Start ECU Flashing ───────────────────────────────────
-  Future<List<String>> startECUFlashing({
-    required String seqFile,
-    required String jsonFile,
-    required String ip,
-    required int    index,
-    required String txHeader,
-    required String rxHeader,
-    required String protocol,
-    required String seedkeyAlgo,
-  }) async {
-    try {
-      final dongle     = _dongles[index];
-      final diagnostic = _diagnostics[index];
-      if (dongle == null || diagnostic == null) {
-        return ['ERROR: Dongle not connected'];
-      }
-
-      flashPercentMap[ip] = 0.0;
-
-      // Step 1: Start CAN transport protocol
-      await dongle.canStartTP();
-
-      // Step 2: Parse hex json file
-      final jsonData = FlashingMatrixData.fromJson(
-          jsonDecode(jsonFile) as Map<String, dynamic>);
-      if (jsonData.sectorData == null || jsonData.sectorData!.isEmpty) {
-        return ['ERROR: Invalid flash data'];
-      }
-
-      // Step 3: Resolve seedkey algorithm
-      SEEDKEYINDEXTYPE seedKeyIndex;
-      try {
-        seedKeyIndex = SEEDKEYINDEXTYPE.values.firstWhere(
-          (e) => e.name == seedkeyAlgo,
-          orElse: () => SEEDKEYINDEXTYPE.RE_SEEDKEY_EPM44,
-        );
-      } catch (_) {
-        seedKeyIndex = SEEDKEYINDEXTYPE.RE_SEEDKEY_EPM44;
-      }
-
-      // Step 4: Build FlashConfig
-      final flashConfig = FlashConfig(seedKeyIndex: seedKeyIndex);
-
-      // Step 5: Set TX header
-      if (txHeader.isNotEmpty) {
-        await dongle.canSetTxHeader(txHeader);
-      }
-
-      // Step 6: Monitor progress
-      _monitorProgress(ip, index, diagnostic);
-
-      // Step 7: Flash — UDSDiagnostic.flashInterpreter()
-      // Internally calls ECUCalculateSeedkey for security unlock
-      final result = await diagnostic.flashInterpreter(
-        flashConfig,
-        jsonData.noOfSectors ?? 0,
-        jsonData.sectorData!,
-        seqFile,
-      );
-
-      flashPercentMap[ip] = 1.0;
-      print('✅ [WiFiPlugin] Flash[$index]: $result');
-      return [result ?? 'NOERROR'];
-    } catch (e) {
-      print('❌ [WiFiPlugin] startECUFlashing[$index]: $e');
-      return ['EXCEPTION: $e'];
-    }
-  }
-
-  // ── Get flash percent ────────────────────────────────────
-  Future<double> getFlashPercent(String ip, int index) async {
-    try {
-      final d = _diagnostics[index];
-      if (d == null) return flashPercentMap[ip] ?? 0.0;
-      final pct = await d.getRuntimeFlashPercent();
-      flashPercentMap[ip] = pct;
-      return pct;
-    } catch (_) {
-      return flashPercentMap[ip] ?? 0.0;
-    }
-  }
-
-  // ── Reset dongle ─────────────────────────────────────────
-  Future<void> resetDongle(String ip, int index) async {
-    try {
-      final dongle = _dongles[index];
-      if (dongle != null) {
-        await dongle.resetDongle();
-        print('✅ [WiFiPlugin] Dongle $index reset');
-      }
-    } catch (e) {
-      print('❌ [WiFiPlugin] resetDongle[$index]: $e');
-    }
-  }
-
-  // ── Internal: read PID value using UDSDiagnostic ─────────
+  // ════════════════════════════════════════════════════════════
+  //  _readPid — sends setup commands with CORRECT .NET CRC
+  //  then uses UDSDiagnostic.readParameters for the actual read
+  // ════════════════════════════════════════════════════════════
   Future<List<String>> _readPid(int index, List<dynamic> rawPids) async {
     try {
-      final diagnostic = _diagnostics[index];
-      if (diagnostic == null) return ['false', ''];
+      final slot = _slots[index];
+      if (slot == null) {
+        print('❌ _readPid[$index]: no slot'); return ['false',''];
+      }
+      if (rawPids.isEmpty) {
+        print('❌ _readPid[$index]: no pids'); return ['false',''];
+      }
 
-      // Convert raw pids to ReadParameterPID list
-      final pidList = rawPids
-          .whereType<Map>()
-          .map((p) =>
-              ReadParameterPID.fromJson(Map<String, dynamic>.from(p)))
-          .toList();
+      final p   = rawPids.first;
+      final map = p is Map ? Map<String,dynamic>.from(p) : <String,dynamic>{};
+      final pidHex = (map['pid']??map['did']??map['code']??map['hex']) as String?;
+      if (pidHex==null||pidHex.isEmpty) {
+        print('❌ _readPid[$index]: no pid field'); return ['false',''];
+      }
 
-      if (pidList.isEmpty) return ['false', ''];
+      // Fresh connect — mirrors .NET new DongleCommWin each time
+      if (slot.ctrl.isConnected.value) {
+        await slot.ctrl.disconnect();
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
 
-      // UDSDiagnostic.readParameters()
-      final responses = await diagnostic.readParameters(
-        pidList.length,
-        pidList,
-      );
+      print('\n🔍 _readPid[$index]: PID=$pidHex TX=${slot.txHeader}');
 
-      if (responses.isEmpty) return ['false', ''];
+      await slot.ctrl.connectWifi(
+        host: slot.ip, port: 6888, selectedType: Connectivity.wiFi);
 
-      // ReadParameterResponse.variables → ReadParameterVariableResponse.responseValue
-      final vars = responses.first.variables;
-      if (vars.isEmpty) return ['false', ''];
+      if (!slot.ctrl.isConnected.value) {
+        print('❌ reconnect failed'); return ['false',''];
+      }
 
-      final value = vars.first.responseValue ?? '';
-      return ['true', value];
+      // Recreate DongleComm on fresh connection
+      final protocol = Protocol.values.firstWhere(
+          (p) => p.value == slot.proto,
+          orElse: () => Protocol.ISO15765_500KB_11BIT_CAN);
+      final dongle = DongleComm(comm: slot.ctrl, isChannel: false);
+      dongle.protocol = protocol;
+      slot.dongle = dongle;
+      slot.diag   = UDSDiagnostic(dongle, ECUCalculateSeedkey());
+
+      final ctrl  = slot.ctrl;
+      final proto = slot.proto;
+      final txH   = slot.txHeader;
+      final rxH   = slot.rxHeader;
+      final txB   = _h2b(txH.padLeft(4,'0'));
+      final rxB   = _h2b(rxH.padLeft(4,'0'));
+      final prH   = proto.toRadixString(16).padLeft(2,'0').toUpperCase();
+
+      // Send each command and wait for response
+      Future<Uint8List?> send(String hex, String label) =>
+          ctrl.sendCommand(_h2b(hex));
+
+      print('🔐 SecurityAccess...');
+      var r = await send('500C47568AFE56214E238000FFC3', 'SA');
+      print('   SA: ${_hex(r)}'); await _ms(150);
+
+      print('🛑 CAN_StopTP...');
+      r = await ctrl.sendCommand(_build('200311',[0x11]));
+      print('   Stop: ${_hex(r)}'); await _ms(150);
+
+      print('⚙️  SetProtocol($prH)...');
+      r = await ctrl.sendCommand(_build('200402$prH',[0x02,proto]));
+      print('   Proto: ${_hex(r)}'); await _ms(150);
+
+      print('📤 SetTxHeader($txH)...');
+      r = await ctrl.sendCommand(_build('200504$txH',[0x04,...txB]));
+      print('   TxH: ${_hex(r)}'); await _ms(100);
+
+      print('📥 SetRxHeaderMask($rxH)...');
+      r = await ctrl.sendCommand(_build('200506$rxH',[0x06,...rxB]));
+      print('   RxH: ${_hex(r)}'); await _ms(100);
+
+      print('🟢 StartPadding...');
+      r = await ctrl.sendCommand(_build('20041200',[0x12,0x00]));
+      print('   Pad: ${_hex(r)}'); await _ms(200);
+
+      // ReadParameters
+      final pidList = <ReadParameterPID>[];
+      for (final item in rawPids) {
+        if (item is! Map) continue;
+        final m    = Map<String,dynamic>.from(item);
+        final code = (m['pid']??m['did']??m['code']??m['hex']) as String?;
+        if (code==null||code.isEmpty) continue;
+        m['pid'] = code;
+        pidList.add(ReadParameterPID.fromJson(m));
+      }
+      if (pidList.isEmpty) return ['false',''];
+
+      print('📡 ReadParameters: ${pidList.length} pid=${pidList[0].pid}');
+      final responses = await slot.diag!.readParameters(pidList.length, pidList);
+
+      if (responses.isEmpty) { print('❌ empty'); return ['false','']; }
+      for (final resp in responses) {
+        final val = resp.variables?.firstOrNull?.responseValue ?? '';
+        if (val.isNotEmpty) {
+          print('✅ _readPid[$index]: "$val"');
+          return ['true', val];
+        }
+      }
+      print('❌ _readPid[$index]: all empty');
+      return ['false',''];
     } catch (e) {
-      print('❌ [WiFiPlugin] _readPid[$index]: $e');
-      return ['false', ''];
+      print('❌ _readPid[$index]: $e');
+      return ['false',''];
     }
   }
 
-  // ── Progress monitor ──────────────────────────────────────
-  void _monitorProgress(String ip, int index, UDSDiagnostic d) {
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(milliseconds: 500));
-      try {
-        final pct = await d.getRuntimeFlashPercent();
-        flashPercentMap[ip] = pct;
-        return pct < 1.0;
-      } catch (_) {
-        return false;
-      }
-    });
+  // ════════════════════════════════════════════════════════════
+  //  CRC-16/Kermit — MATCHES .NET Crc16CcittKermit.ComputeChecksum
+  //  init=0x0000, poly=0x8408 (reflected 0x1021)
+  // ════════════════════════════════════════════════════════════
+  Uint8List _build(String cmdHex, List<int> crcBytes) {
+    final crc = _kermit(crcBytes);
+    final hi  = (crc >> 8) & 0xFF;
+    final lo  = crc & 0xFF;
+    return _h2b(cmdHex +
+        hi.toRadixString(16).padLeft(2, '0').toUpperCase() +
+        lo.toRadixString(16).padLeft(2, '0').toUpperCase());
   }
 
-  CommController _getOrCreate(int index) {
-    _controllers[index] ??= CommController();
-    return _controllers[index]!;
+  int _kermit(List<int> data) {
+    int crc = 0x0000;
+    for (final b in data) {
+      crc ^= b;
+      for (int i = 0; i < 8; i++) {
+        crc = (crc & 1) != 0 ? (crc >> 1) ^ 0x8408 : crc >> 1;
+      }
+    }
+    return crc;
+  }
+
+  Uint8List _h2b(String hex) {
+    hex = hex.replaceAll(' ', '');
+    if (hex.length.isOdd) hex = '0$hex';
+    final r = Uint8List(hex.length ~/ 2);
+    for (int i = 0; i < r.length; i++)
+      r[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    return r;
+  }
+
+  String _hex(Uint8List? b) {
+    if (b == null || b.isEmpty) return 'null';
+    return b.map((e) => e.toRadixString(16).padLeft(2, '0').toUpperCase())
+        .join(' ');
+  }
+
+  Future<void> _ms(int ms) => Future.delayed(Duration(milliseconds: ms));
+
+  // ════════════════════════════════════════════════════════════
+  //  Public API
+  // ════════════════════════════════════════════════════════════
+  Future<List<String>> getESN(String ip, int i, List<dynamic> p) async =>
+      _readPid(i, p);
+  Future<List<String>> getHW(String ip, int i, List<dynamic> p) async =>
+      _readPid(i, p);
+  Future<List<String>> getSW(String ip, int i, List<dynamic> p) async =>
+      _readPid(i, p);
+  Future<List<String>> getCalId(String ip, int i, List<dynamic> p) async =>
+      _readPid(i, p);
+  Future<List<String>> getCVN(String ip, int i, List<dynamic> p) async =>
+      _readPid(i, p);
+
+  // ════════════════════════════════════════════════════════════
+  //  Flash
+  // ════════════════════════════════════════════════════════════
+  Future<String> startECUFlashing({
+    required String ip,
+    required int    index,
+    required String seqFileContent,
+    required String hexFileContent,
+    required String seedKeyIndex,
+    required String txHeader,
+    required String rxHeader,
+    required String protocolHex,
+    required Function(double) onProgress,
+    required Function(String) onStatus,
+  }) async {
+    try {
+      final slot = _slots[index];
+      if (slot == null || !slot.ready || slot.diag == null)
+        return 'ERROR: slot $index not initialized';
+
+      final jsonData = FlashingMatrixData.fromJson(
+          jsonDecode(hexFileContent) as Map<String, dynamic>);
+      if (jsonData.noOfSectors == null) return 'ERROR: invalid hex JSON';
+
+      SEEDKEYINDEXTYPE seedEnum;
+      try {
+        seedEnum = SEEDKEYINDEXTYPE.values.firstWhere(
+            (e) => e.name == seedKeyIndex,
+            orElse: () => SEEDKEYINDEXTYPE.RE_SEEDKEY);
+      } catch (_) { seedEnum = SEEDKEYINDEXTYPE.RE_SEEDKEY; }
+
+      final result = await slot.diag!.flashInterpreter(
+        FlashConfig(seedKeyIndex: seedEnum),
+        jsonData.noOfSectors!,
+        jsonData.sectorData!,
+        seqFileContent,
+      );
+      return result ?? 'NOERROR';
+    } catch (e) {
+      print('❌ startECUFlashing[$index]: $e');
+      return 'ERROR: $e';
+    }
+  }
+
+  Future<void> resetDongle(String ip, int index) async {
+    try {
+      final slot = _slots[index];
+      if (slot != null && slot.ready) {
+        // DongleReset: "200301" + CRC([0x01])
+        await slot.ctrl.sendCommand(_build('200301', [0x01]));
+      }
+    } catch (e) { print('❌ resetDongle[$index]: $e'); }
   }
 }
