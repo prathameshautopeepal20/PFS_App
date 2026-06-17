@@ -451,19 +451,12 @@ class HomePageController extends GetxController {
         final sub    = device.selectedSubModel;
         final ecuSub = sub?.ecuSubmodel.isNotEmpty == true
             ? sub!.ecuSubmodel[0] : null;
-        final txHdrRaw = ecuSub?.txHeader           ?? '7DF';
+        // PCAN log confirmed: TX=07E0 works, 7DF does NOT work for this ECU
+        final txHdr    = ecuSub?.txHeader.isNotEmpty == true
+            ? ecuSub!.txHeader : '7E0'; // default 7E0 (direct ECU address)
         final rxHdr    = ecuSub?.rxHeader           ?? '7E8';
         final protoHex = ecuSub?.protocolAutopeepal ?? '02';
-
-        // Debug — show exactly what server returned
-        print('🔧 Server values: TX=$txHdrRaw RX=$rxHdr proto=$protoHex');
-        print('🔧 ecuSub: ${ecuSub?.toJson()}');
-
-        // If server returns 7DF (broadcast) → use 7E0 (direct ECU address)
-        // 7DF = OBD2 broadcast, 7E0 = direct ECU address
-        // From .NET image: TX=7E0h works, 7DF does not
-        final txHdr = (txHdrRaw == '7DF' || txHdrRaw == '07DF')
-            ? '7E0' : txHdrRaw;
+        print('🔧 Dongle ${device.srNo}: TX=$txHdr RX=$rxHdr proto=$protoHex');
 
         device.isDongle = await _wifi.checkDongle(
           device.ipAddress, device.index,

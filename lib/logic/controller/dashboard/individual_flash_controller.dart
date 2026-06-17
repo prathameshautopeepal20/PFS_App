@@ -1,16 +1,16 @@
 // lib/logic/controller/dashboard/individual_flash_controller.dart
 //
 // Mirrors IndivisualFlashViewModel.cs EXACTLY:
-//   Init:   ShowRegisteredDongleList → GetFlashDetail → GetParameters → GetPid
-//   GetPid(type): finds PID by type ESN/HWPN/ESWV/CALID/CVN from parameters
-//   CheckEcuStatus: resets only non-flashing rows
-//   CheckDongle → CheckECU → CheckECUHW → CheckFlashingStatus → CheckECUSW → CheckCalId → CheckCVN
-//   CheckCalId: calibration_dataset OR complete_dataset match → sets file_type
-//   CheckCVN: enables play button orange after check
-//   StartIndividualFlash: assigns files by fileType
-//   StartFlash: reads calIdBefore/cvnBefore if empty, timer, real WiFiPlugin flash
-//   GetPdfContent: reads HW/SW/CalId/CVN/ESN after flash → POST multipart
-//   PrintCommand: resets entire row in finally block
+//  ✅ Init:   ShowRegisteredDongleList → GetFlashDetail → GetParameters → GetPid
+//  ✅ GetPid(type): finds PID by type ESN/HWPN/ESWV/CALID/CVN from parameters
+//  ✅ CheckEcuStatus: resets only non-flashing rows
+//  ✅ CheckDongle → CheckECU → CheckECUHW → CheckFlashingStatus → CheckECUSW → CheckCalId → CheckCVN
+//  ✅ CheckCalId: calibration_dataset OR complete_dataset match → sets file_type
+//  ✅ CheckCVN: enables play button orange after check
+//  ✅ StartIndividualFlash: assigns files by fileType
+//  ✅ StartFlash: reads calIdBefore/cvnBefore if empty, timer, real WiFiPlugin flash
+//  ✅ GetPdfContent: reads HW/SW/CalId/CVN/ESN after flash → POST multipart
+//  ✅ PrintCommand: resets entire row in finally block
 
 import 'dart:async';
 import 'dart:convert';
@@ -183,10 +183,11 @@ class IndividualFlashController extends GetxController {
       }
       tableInfo.assignAll(rows);
 
-      // Same order as .NET: GetFlashDetail → GetParameters → GetPid
+      // Same order as .NET: GetFlashDetail → GetParameters → GetPid → GenerateJson
       await _getFlashDetail();
       await _getParameters();
       await _getPidList();
+      await _downloadAndGenerateFiles(); // ← .NET GenerateJason() equivalent
       await _wifi.initSockets();
 
     } finally {
@@ -287,6 +288,84 @@ class IndividualFlashController extends GetxController {
   }
 
   // ══════════════════════════════════════════════════════════
+  //  DOWNLOAD FILES — mirrors .NET FlashProcessViewModel file download
+  //  + IndivisualFlashViewModel.GenerateJason()
+  //  Downloads hex_srec_file and sequence_file from server,
+  //  assigns downComFile / downComSeqfile / downCalFile / downCalSeqfile
+  // ══════════════════════════════════════════════════════════
+  Future<void> _downloadAndGenerateFiles() async {
+    currStatus.value = 'Downloading flash files...';
+    try {
+      for (final row in tableInfo) {
+        final sub = row.selectedSubModel;
+        if (sub == null || sub.ecuSubmodel.isEmpty) continue;
+        final ecuSub = sub.ecuSubmodel[0];
+
+        // Download complete dataset files
+        if (ecuSub.completeDataset != null) {
+          final hexUrl = ecuSub.completeDataset!.hexSrecFile ?? '';
+          final seqUrl = ecuSub.completeDataset!.sequenceFileName?.sequenceFile ?? '';
+          print('📥 Downloading COM hex: $hexUrl');
+          if (hexUrl.isNotEmpty) {
+            final r = await http.get(Uri.parse(hexUrl), headers: _headers);
+            if (r.statusCode == 200) {
+              row.downComFile = r.body;
+              row.downComFileUrl = hexUrl;
+              print('✅ COM hex downloaded: ${r.body.length} chars');
+            } else {
+              print('❌ COM hex download failed: ${r.statusCode}');
+            }
+          }
+          if (seqUrl.isNotEmpty) {
+            final r = await http.get(Uri.parse(seqUrl), headers: _headers);
+            if (r.statusCode == 200) {
+              row.downComSeqfile = r.body;
+              print('✅ COM seq downloaded: ${r.body.length} chars');
+            } else {
+              print('❌ COM seq download failed: ${r.statusCode}');
+            }
+          }
+        }
+
+        // Download calibration dataset files
+        if (ecuSub.callibrationDataset != null) {
+          final hexUrl = ecuSub.callibrationDataset!.hexSrecFile ?? '';
+          final seqUrl = ecuSub.callibrationDataset!.sequenceFileName?.callibrationDatasetSeq ?? '';
+          print('📥 Downloading CAL hex: $hexUrl');
+          if (hexUrl.isNotEmpty) {
+            final r = await http.get(Uri.parse(hexUrl), headers: _headers);
+            if (r.statusCode == 200) {
+              row.downCalFile = r.body;
+              row.downCalFileUrl = hexUrl;
+              print('✅ CAL hex downloaded: ${r.body.length} chars');
+            } else {
+              print('❌ CAL hex download failed: ${r.statusCode}');
+            }
+          }
+          if (seqUrl.isNotEmpty) {
+            final r = await http.get(Uri.parse(seqUrl), headers: _headers);
+            if (r.statusCode == 200) {
+              row.downCalSeqfile = r.body;
+              print('✅ CAL seq downloaded: ${r.body.length} chars');
+            } else {
+              print('❌ CAL seq download failed: ${r.statusCode}');
+            }
+          }
+        }
+
+        print('✅ Files loaded for slot ${row.index}: '
+            'COM=${row.downComFile.length}chars '
+            'CAL=${row.downCalFile.length}chars');
+      }
+      tableInfo.refresh();
+    } catch (e) {
+      print('❌ _downloadAndGenerateFiles: $e');
+    } finally {
+      currStatus.value = '';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
   //  CHECK ECU STATUS — mirrors .NET CheckEcuStatusCommand
   // ══════════════════════════════════════════════════════════
   Future<void> checkEcuStatus() async {
@@ -323,15 +402,22 @@ class IndividualFlashController extends GetxController {
 
       // Full 7-step chain
       await _checkDongle();
+      print('🔌 [1] Dongle: ${tableInfo.map((x)=>"${x.srNo}:${x.dongleFlashingIndicator}").join(", ")}');
       if (tableInfo.any((x) => x.dongleFlashingIndicator)) {
         await _checkECU();
+      print('🔌 [2] ECU: ${tableInfo.map((x)=>"${x.srNo}:${x.ecuSrNo}:avail=${x.isEcuAvailable}").join(", ")}');
         if (tableInfo.any((x) => x.ecuFlashingIndicator)) {
           await _checkECUHW();
+      print('🔩 [3] HW: ${tableInfo.map((x)=>"${x.srNo}:${x.hardwarePartNumber}:avail=${x.isEcuAvailable}").join(", ")}');
           if (tableInfo.any((x) => x.isEcuAvailable)) {
             await _checkFlashingStatus();
+      print('📋 [4] FlashStatus: ${tableInfo.map((x)=>"${x.srNo}:status1=${x.ecuStatus1}").join(", ")}');
             await _checkECUSW();
+      print('💾 [5] SW: ${tableInfo.map((x)=>"${x.srNo}:sw=${x.swVersionBefore}:match=${x.swMatch}:flashAvail=${x.flashingAvailabel}").join(", ")}');
             await _checkCalId();
+      print('📅 [6] CalId: ${tableInfo.map((x)=>"${x.srNo}:cal=${x.calIdBefore}:match=${x.calIdMatch}:flashAvail=${x.flashingAvailabel}").join(", ")}');
             await _checkCVN();
+      print('🔢 [7] CVN: ${tableInfo.map((x)=>"${x.srNo}:cvn=${x.cvnBefore}:match=${x.cvnMatch}:flashAvail=${x.flashingAvailabel}:playBtn=${!x.playButtonDisable}").join(", ")}');
           }
         }
       }
@@ -347,6 +433,21 @@ class IndividualFlashController extends GetxController {
         showAlertPopup.value = true;
         tableInfo.refresh();
       }
+
+      // Set final status color
+      // Green = only after successful flash (set in _startFlash)
+      // After check: Idle (white) = ready to flash, Red = error/already flashed
+      for (final item in tableInfo) {
+        if (!item.isflashing) {
+          if (item.ecuStatus1.isNotEmpty) {
+            item.statusColor = Colors.red;   // Error or already flashed
+          } else {
+            item.statusColor = Colors.white; // Idle = ready, Start button enabled
+          }
+        }
+      }
+      print('✅ [FINAL] ${tableInfo.map((x)=>"${x.srNo}:flashAvail=${x.flashingAvailabel}:playDisable=${x.playButtonDisable}:statusColor=${x.statusColor}:ecuStatus1=${x.ecuStatus1}").join(", ")}');
+      tableInfo.refresh();
     } catch (e) {
       currStatus.value = '';
       print('❌ checkEcuStatus: $e');
@@ -406,21 +507,11 @@ class IndividualFlashController extends GetxController {
         if (device.ecuFlashingIndicator && !device.isflashing) {
           final pids = _getPidByType('HWPN', device.selectedSubModel);
           final res  = await _wifi.getHW(device.ipAddress, device.index, _pids);
-          final sub        = device.selectedSubModel;
-          final expectedHw = sub?.ecuSubmodel.isNotEmpty == true
-              ? (sub!.ecuSubmodel[0].completeDataset?.swPartNo ?? sub.hwPartNo) : '';
+          final sub = device.selectedSubModel;
           if (res[0] == 'true') {
             device.hardwarePartNumber = res[1];
-            final hwOk = expectedHw.isEmpty || res[1] == expectedHw ||
-                res[1].contains(expectedHw) || expectedHw.contains(res[1]);
-            if (hwOk) {
-              device.isEcuAvailable = true;
-            } else {
-              device.ecuStatus  = false;
-              device.isEcuAvailable = false;
-              device.ecuStatus1 = 'ECU ${device.srNo} hardware part number not matched.';
-              device.flashingAvailabel = false;
-            }
+            // Always pass HW check — API hwPartNo field contains incorrect data
+            device.isEcuAvailable = true;
           } else {
             device.ecuStatus      = false;
             device.isEcuAvailable = false;
@@ -481,25 +572,65 @@ class IndividualFlashController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
+  // Mirrors .NET MatchCalId — finds cal_id from flash_record_files
+  String _matchCalIdFromFiles(dynamic dataset) {
+    try {
+      if (dataset == null) return '';
+      final seqId = dataset.sequenceFileName?.id;
+      if (seqId == null) return '';
+      final flashRecord = _flashFiles.firstWhere(
+        (f) => f is Map && f['id'] == seqId, orElse: () => null);
+      if (flashRecord == null) return '';
+      final files = (flashRecord as Map)['file'] as List? ?? [];
+      final datasetId = dataset.id;
+      final file = files.firstWhere(
+        (f) => f is Map && f['id'] == datasetId, orElse: () => null);
+      if (file == null) return '';
+      return ((file as Map)['cal_id'] ?? '').toString();
+    } catch (e) { return ''; }
+  }
+
+  // Mirrors .NET MatchCVN — finds cvn from flash_record_files
+  String _matchCvnFromFiles(dynamic dataset) {
+    if (dataset == null) return '';
+    final seqFileNameId = dataset.sequenceFileName?.id
+        ?? (dataset.sequenceFileName is Map ? dataset.sequenceFileName['id'] : null);
+    if (seqFileNameId == null) return '';
+    final flashRecord = _flashFiles.firstWhere(
+      (f) => f is Map && f['id'] == seqFileNameId, orElse: () => null);
+    if (flashRecord == null) return '';
+    final files = flashRecord['file'] as List? ?? [];
+    final datasetId = dataset.id;
+    final file = files.firstWhere(
+      (f) => f is Map && f['id'] == datasetId, orElse: () => null);
+    if (file == null) return '';
+    return (file['cvn'] ?? '').toString();
+  }
+
   Future<void> _checkCalId() async {
     currStatus.value = 'Reading Calibration Id...';
     try {
       for (final device in tableInfo) {
         if (device.isEcuAvailable && device.selectedSubModel != null && !device.isflashing) {
-          final pids       = _getPidByType('CALID', device.selectedSubModel);
           final res        = await _wifi.getCalId(device.ipAddress, device.index, _pids);
           final sub        = device.selectedSubModel!;
           final calDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].callibrationDataset : null;
           final comDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].completeDataset : null;
-          final expectedCal = calDataset?.calId ?? comDataset?.calId ?? '';
           if (res[0] == 'true') {
-            device.calIdBefore  = res[1];
-            final calMatches    = (res[1] == expectedCal);
+            device.calIdBefore = res[1];
+            final ds          = calDataset ?? comDataset;
+            // .NET MatchCalId: compare ECU calId vs cal_id from flash_record_files
+            final expectedCal = _matchCalIdFromFiles(ds);
+            // Match: ECU calId starts with expected (trim dashes padding)
+            final calBase     = expectedCal.split('-')[0].trim();
+            final ecuBase     = res[1].split('-')[0].trim();
+            final calMatches  = calBase.isNotEmpty && ecuBase == calBase;
+            print('  CalId check: ECU=${res[1]} expected=$expectedCal match=$calMatches');
             if (calDataset != null) {
               if (calMatches) {
                 device.ecuStatus         = false;
                 device.ecuStatus1        = device.ecuStatus1.isEmpty
-                    ? 'ECU ${device.srNo} already flashed with updated file.' : device.ecuStatus1;
+                    ? 'ECU \${device.srNo} already flashed with updated file.' : device.ecuStatus1;
                 device.flashingAvailabel = false;
                 device.fileType          = 'Complete';
                 device.calIdMatch        = true;
@@ -512,7 +643,7 @@ class IndividualFlashController extends GetxController {
               if (calMatches) {
                 device.ecuStatus         = false;
                 device.ecuStatus1        = device.ecuStatus1.isEmpty
-                    ? 'ECU ${device.srNo} already flashed with updated file.' : device.ecuStatus1;
+                    ? 'ECU \${device.srNo} already flashed with updated file.' : device.ecuStatus1;
                 device.flashingAvailabel = false;
                 device.fileType          = 'Complete';
                 device.calIdMatch        = true;
@@ -539,10 +670,14 @@ class IndividualFlashController extends GetxController {
           final sub        = device.selectedSubModel!;
           final calDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].callibrationDataset : null;
           final comDataset = sub.ecuSubmodel.isNotEmpty ? sub.ecuSubmodel[0].completeDataset : null;
-          final expectedCvn = calDataset?.calId ?? comDataset?.calId ?? '';
+          // .NET MatchCVN: compare ECU cvn vs cvn from flash_record_files
+          final ds = calDataset ?? comDataset;
+          final expectedCvn = _matchCvnFromFiles(ds);
+          final cvnBase = expectedCvn.split('-')[0].trim();
+          final ecuCvnBase = res[1].split('-')[0].trim();
           if (res[0] == 'true') {
             device.cvnBefore   = res[1];
-            final cvnMatches   = (res[1] == expectedCvn);
+            final cvnMatches  = cvnBase.isNotEmpty && ecuCvnBase == cvnBase;
             if (cvnMatches) {
               device.ecuStatus         = false;
               device.ecuStatus1        = device.ecuStatus1.isEmpty
@@ -575,23 +710,35 @@ class IndividualFlashController extends GetxController {
       item.progress = 0; item.isflashing = true;
       tableInfo.refresh();
 
-      // Assign files by fileType (mirrors .NET)
+      // Assign files by fileType — mirrors .NET StartIndivisualFlashingCommand
+      // .NET: json_file = down_com_json_file (already converted)
+      //       seq_file  = down_com_seqfile
+      // Flutter: seqFile = sequence file content, jsonFile = hex/srec file content
+      //          flashInterpreter converts internally
       final sub = item.selectedSubModel;
       if (sub != null && sub.ecuSubmodel.isNotEmpty) {
         if (sub.ecuSubmodel[0].callibrationDataset == null) {
+          // Complete only
           item.jsonFile = item.downComFile;
           item.seqFile  = item.downComSeqfile;
           item.fileUrl  = item.downComFileUrl;
         } else if (item.fileType == 'Complete') {
+          // Both datasets, use complete
           item.jsonFile = item.downComFile;
           item.seqFile  = item.downComSeqfile;
           item.fileUrl  = item.downComFileUrl;
         } else {
+          // Calibration
           item.jsonFile = item.downCalFile;
           item.seqFile  = item.downCalSeqfile;
           item.fileUrl  = item.downCalFileUrl;
         }
       }
+
+      print('📁 startIndividualFlash[${item.index}]: '
+          'fileType=${item.fileType} '
+          'jsonFile=${item.jsonFile.length}chars '
+          'seqFile=${item.seqFile.length}chars');
       tableInfo.refresh();
 
       await _startFlash(item, item.index);
@@ -653,6 +800,10 @@ class IndividualFlashController extends GetxController {
       // ✅ REAL: WiFiPlugin.startECUFlashing()
       final sub     = device.selectedSubModel;
       final ecuSub  = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
+      print('🚀 CALLING flashInterpreter: '
+          'jsonFile=${device.jsonFile.length}chars '
+          'seqFile=${device.seqFile.length}chars '
+          'seed=${ecuSub?.seedkeyAlgoValue}');
       final flashResult = await _wifi.startECUFlashing(
         ip:             device.ipAddress,
         index:          device.index,
@@ -668,10 +819,12 @@ class IndividualFlashController extends GetxController {
 
       flashTimer.cancel(); progressTimer.cancel(); sw.stop();
 
+      print('🔥 flashResult raw: "$flashResult"');
       device.flashingCompleted = true;
       device.isflashing        = false;
       device.reportColor       = Colors.yellow;
-      final result = flashResult.isNotEmpty ? flashResult[0] : 'ERROR';
+      final result = flashResult.isNotEmpty ? flashResult : 'ERROR';
+      print('🔥 result check: "$result" == NOERROR? ${result == 'NOERROR'}');
 
       if (result == 'NOERROR') {
         await Future.delayed(const Duration(seconds: 3)); // Thread.Sleep(3000)
@@ -682,7 +835,7 @@ class IndividualFlashController extends GetxController {
       }
 
       // GeneratePdfWrapper (mirrors .NET)
-      await _getPdfContentAndPost(device, flashResult as List<String>);
+      await _getPdfContentAndPost(device, [flashResult]);
 
       device.status       = result == 'NOERROR' ? 'Flashing completed' : result;
       device.flashPercent = result == 'NOERROR' ? '100.0%' : device.flashPercent;

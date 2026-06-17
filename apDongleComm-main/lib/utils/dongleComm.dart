@@ -17,11 +17,17 @@ class DongleComm {
   List<SessionLogsModel> logs = []; // nullable, could be null
   DongleComm({this.comm, required this.isChannel, this.channelId});
 
+  // channelId defaults to '00' if null — matches .NET ChannelId = "00"
+  String get ch => channelId ?? '00';
+
   Future<Uint8List?> securityAccess() async {
     String command;
+    // channelId defaults to '00' if null (matches .NET ChannelId = "00")
+    final ch = channelId ?? '00';
 
     if (isChannel) {
-      command = '500A${channelId}47568AFE56214E238000FFC3';
+      // .NET: command = "500a" + ChannelId + "47313030746565727061d13e"
+      command = '500A${ch}47313030746565727061D13E';
     } else {
       command = '500C47568AFE56214E238000FFC3';
     }
@@ -58,7 +64,7 @@ class DongleComm {
       int crcByteIndex;
 
       if (isChannel) {
-        commandHex = "2001${channelId}21";
+        commandHex = "2001${ch}21";
         crcByteIndex = 3;
       } else {
         commandHex = "200321";
@@ -104,7 +110,7 @@ class DongleComm {
       late List<int> crc;
 
       if (isChannel) {
-        command = "2001${channelId}14";
+        command = "2001${ch}14";
 
         bytesCommand = hexToBytes(command);
         crc = Crc16CcittKermit.computeChecksumBytes([bytesCommand[3]]);
@@ -135,7 +141,7 @@ class DongleComm {
     try {
       print("------ Inside Dongle_Reset ------");
 
-      String commandBase = isChannel ? "2001${channelId}01" : "200301";
+      String commandBase = isChannel ? "2001${ch}01" : "200301";
 
       Uint8List bytesCommand = hexToBytes(commandBase);
 
@@ -150,7 +156,7 @@ class DongleComm {
     String command;
 
     if (isChannel) {
-      command = "2001${channelId}03";
+      command = "2001${ch}03";
     } else {
       command = "200303";
     }
@@ -169,7 +175,7 @@ class DongleComm {
     Uint8List bytesToHash;
 
     if (isChannel) {
-      commandBase = "2002${channelId}02$protoHex";
+      commandBase = "2002${ch}02$protoHex";
       Uint8List fullBytes = hexToBytes(commandBase);
       bytesToHash = Uint8List.fromList([fullBytes[3], fullBytes[4]]);
     } else {
@@ -876,7 +882,7 @@ class DongleComm {
     // 2. Build command and select CRC byte range
     if (is11Bit) {
       if (isChannel) {
-        command = "2003${channelId}04$txHeader";
+        command = "2003${ch}04$txHeader";
         final bytes = hex.decode(command);
         crcInput = bytes.sublist(3, 6); // bytes[3], [4], [5]
       } else {
@@ -886,7 +892,7 @@ class DongleComm {
       }
     } else if (is29Bit) {
       if (isChannel) {
-        command = "2005${channelId}04$txHeader";
+        command = "2005${ch}04$txHeader";
         final bytes = hex.decode(command);
         crcInput = bytes.sublist(3, 8); // bytes[3..7]
       } else {
@@ -896,7 +902,7 @@ class DongleComm {
       }
     } else if (isKWP) {
       if (isChannel) {
-        command = "2002${channelId}04$txHeader";
+        command = "2002${ch}04$txHeader";
         final bytes = hex.decode(command);
         crcInput = bytes.sublist(3, 5); // bytes[3], [4]
       } else {
@@ -1073,7 +1079,7 @@ class DongleComm {
     List<int> checksumBytes;
 
     if (isChannel) {
-      command = "2001${channelId}0d";
+      command = "2001${ch}0d";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         Uint8List.fromList([bytesCommand[3]]),
@@ -1101,7 +1107,7 @@ class DongleComm {
     List<int> checksumBytes;
 
     if (isChannel) {
-      command = "2002${channelId}0c$p1min";
+      command = "2002${ch}0c$p1min";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         bytesCommand.sublist(3, 6),
@@ -1128,7 +1134,7 @@ class DongleComm {
     List<int> checksumBytes;
 
     if (isChannel) {
-      command = "2003${channelId}0e$p2max";
+      command = "2003${ch}0e$p2max";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         bytesCommand.sublist(3, 6),
@@ -1155,7 +1161,7 @@ class DongleComm {
     List<int> checksumBytes;
 
     if (isChannel) {
-      command = "2001${channelId}0f";
+      command = "2001${ch}0f";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         Uint8List.fromList([bytesCommand[3]]),
@@ -1186,7 +1192,7 @@ class DongleComm {
       String command = "";
       List<int> checksumBytes;
       if (isChannel) {
-        command = "2001${channelId}10";
+        command = "2001${ch}10";
         Uint8List bytesCommand = hexToBytes(command);
         checksumBytes = Crc16CcittKermit.computeChecksumBytes(
           Uint8List.fromList([bytesCommand[3]]),
@@ -1227,7 +1233,7 @@ class DongleComm {
       String command = "";
       List<int> checksumBytes;
       if (isChannel) {
-        command = "2001${channelId}11";
+        command = "2001${ch}11";
         Uint8List bytesCommand = hexToBytes(command);
         checksumBytes = Crc16CcittKermit.computeChecksumBytes(
           Uint8List.fromList([bytesCommand[3]]),
@@ -1263,7 +1269,7 @@ class DongleComm {
     List<int> checksumBytes;
 
     if (isChannel) {
-      command = "2002${channelId}0c$commValue";
+      command = "2002${ch}0c$commValue";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         bytesCommand.sublist(3, 5),
@@ -1291,7 +1297,7 @@ class DongleComm {
     String command = "";
     List<int> checksumBytes;
     if (isChannel) {
-      command = "2002${channelId}12$paddingByte";
+      command = "2002${ch}12$paddingByte";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         bytesCommand.sublist(3, 5),
@@ -1317,7 +1323,7 @@ class DongleComm {
     String command = "";
     List<int> checksumBytes;
     if (isChannel) {
-      command = "2001${channelId}13";
+      command = "2001${ch}13";
       Uint8List bytesCommand = hexToBytes(command);
       checksumBytes = Crc16CcittKermit.computeChecksumBytes(
         Uint8List.fromList([bytesCommand[3]]),
