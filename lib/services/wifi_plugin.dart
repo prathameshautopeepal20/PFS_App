@@ -104,15 +104,19 @@ class WiFiPlugin {
         return ['false', ''];
       }
 
-      // Build target PID — hardcoded PIDs for each type
-      // ESN=0906 (OBD2 mode09), CALID=0904 (OBD2 mode09), others are UDS 22xx
-      // NEVER fallback to first PID (would cause CALID to read ESN)
+      // Build target PID — hardcoded PIDs matching .NET exactly
+      // From .NET debug log:
+      // CHECK ESN  → PID 22F18C → "210535372---"  (serial_no for API)
+      // CHECK HPN  → PID 22F18B → "A3C073719---"  (hw_part_no)
+      // CHECK SW   → PID 22F188 → "CP352000"       (sw_version)
+      // CHECK CALID→ PID 0904   → "RE23520P04EU5002"
+      // CHECK CVN  → PID 0906   → "8DE09AA0"       (cvn for API)
       final _hardcoded = <String, String>{
-        'ESN':   '0906',
+        'ESN':   '22F18C',  // .NET ESN = PID 22F18C
         'CALID': '0904',
-        'SW':    '22F18B',
-        'HW':    '22F188',
-        'CVN':   '22F18C',
+        'SW':    '22F188',  // .NET SW = PID 22F188
+        'HW':    '22F18B',  // .NET HPN = PID 22F18B
+        'CVN':   '0906',    // .NET CVN = PID 0906
       };
 
       // Try to find matching PID in rawPids from API first
@@ -121,11 +125,11 @@ class WiFiPlugin {
         if (item is! Map) continue;
         final m    = Map<String, dynamic>.from(item);
         final code = (m['pid'] ?? m['did'] ?? m['code'] ?? '').toString().toUpperCase();
-        if (pidType == 'ESN'   && code == '0906')            { m['pid'] = '0906';   targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'CALID' && code == '0904')            { m['pid'] = '0904';   targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'SW'    && code.startsWith('22F18B')) { m['pid'] = code;     targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'HW'    && code.startsWith('22F188')) { m['pid'] = code;     targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'CVN'   && code.startsWith('22F18C')) { m['pid'] = code;     targetPidObj = ReadParameterPID.fromJson(m); break; }
+        if (pidType == 'ESN'   && code.startsWith('22F18C')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
+        if (pidType == 'CALID' && code == '0904')            { m['pid'] = '0904'; targetPidObj = ReadParameterPID.fromJson(m); break; }
+        if (pidType == 'SW'    && code.startsWith('22F188')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
+        if (pidType == 'HW'    && code.startsWith('22F18B')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
+        if (pidType == 'CVN'   && code == '0906')            { m['pid'] = '0906'; targetPidObj = ReadParameterPID.fromJson(m); break; }
       }
 
       // Fallback: build from hardcoded — NEVER use pidList.first

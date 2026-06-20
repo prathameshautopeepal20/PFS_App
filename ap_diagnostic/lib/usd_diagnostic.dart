@@ -2193,15 +2193,13 @@ class UDSDiagnostic {
               var parts = bracketString.split(',');
               String reference = parts[0];
 
-              bool isCopyMSB = false;
+              // .NET: Convert.ToInt32(parts[1]) = decimal parse
+              // No isCopyMSB - .NET always uses Array.Resize (first bytes)
+              bool isCopyMSB = parts[1].contains('-');
               int copyLength;
-
-              if (parts[1].contains('-')) {
-                isCopyMSB = true;
-                copyLength = int.parse(parts[1].substring(1), radix: 16);
-              } else {
-                copyLength = int.parse(parts[1], radix: 16);
-              }
+              String lenStr = parts[1].replaceAll('-', '').trim();
+              // Try decimal first (like .NET Convert.ToInt32), fallback hex
+              copyLength = int.tryParse(lenStr) ?? int.tryParse(lenStr, radix: 16) ?? 0;
 
               Uint8List copyArray = Uint8List(0);
 
@@ -2298,9 +2296,11 @@ class UDSDiagnostic {
                 ]);
               }
 
-              // MSB/LSB Slicing logic
-              if (!isCopyMSB && copyArray.length > copyLength) {
-                copyArray = copyArray.sublist(copyArray.length - copyLength);
+              // .NET behavior: Array.Resize(ref copyArray, copyLength)
+              // Always keeps FIRST copyLength bytes (truncates from end)
+              // No MSB/LSB distinction - same for ALL references including 'key'
+              if (copyArray.length > copyLength) {
+                copyArray = copyArray.sublist(0, copyLength);
               }
 
               // Resize/Pad to fit copyLength exactly
@@ -2557,6 +2557,8 @@ class UDSDiagnostic {
                   print(
                     "-------get key response = ${byteArrayToHexString(seedKey)}-------",
                   );
+                  // Add delay after key calculation to allow ECU processing time
+                  await Future.delayed(const Duration(milliseconds: 100));
                 } else {
                   print("❌ Calculation returned empty key buffer");
                   return "ERROR_CALCULATION_EMPTY";

@@ -67,19 +67,19 @@ class LoginScreen extends GetView<LoginController> {
                             Container(
                               padding: const EdgeInsets.all(18),
                               decoration: const BoxDecoration(),
-                              child: Image.asset(
-                                "assets/new/autopeepal.png",
-                                height: 150,
-                                width: 300,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(
-                                    Icons.flash_on,
-                                    size: 80,
-                                    color: Colors.white,
-                                  );
-                                },
-                              ),
+                              // child: Image.asset(
+                              //   "assets/new/autopeepal.png",
+                              //   height: 150,
+                              //   width: 300,
+                              //   fit: BoxFit.contain,
+                              //   errorBuilder: (context, error, stackTrace) {
+                              //     return const Icon(
+                              //       Icons.flash_on,
+                              //       size: 80,
+                              //       color: Colors.white,
+                              //     );
+                              //   },
+                              // ),
                             ),
                             const SizedBox(height: 25),
                             const Text(

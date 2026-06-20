@@ -361,7 +361,8 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkDongle() async {
     currStatus.value = 'Checking Dongle Connection...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: check all dongles simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.selectedSubModel != null && !device.isflashing) {
           device.isDongle = await _wifi.checkDongle(device.ipAddress, device.index);
           if (device.isDongle) {
@@ -374,7 +375,7 @@ class IndividualFlashController extends GetxController {
             device.ecuStatus1 = 'Dongle ${device.srNo} not found.';
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -382,27 +383,28 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkECU() async {
     currStatus.value = 'Checking ECU Connection...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: read ESN from all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.dongleFlashingIndicator && !device.isflashing) {
           final pids = _getPidByType('ESN', device.selectedSubModel);
           final res  = await _wifi.getESN(device.ipAddress, device.index, pids);
-          print('  ESN: res[0]=${res[0]} val="${res.length>1 ? res[1] : ""}"');
+          print('  ESN[${device.srNo}]: res[0]=${res[0]} val="${res.length>1 ? res[1] : ""}"');
           if (res[0] == 'true') {
             device.ecuFlashingIndicator = true;
             device.ecuSrNo              = res[1];
             device.isEcuAvailable       = true;
             device.ecuStatusColor       = Colors.green;
-            print('  ✅ ESN=${res[1]}');
+            print('  ✅ ECU[${device.srNo}] ESN=${res[1]}');
           } else {
             device.ecuSrNo              = res.length > 1 ? res[1] : '';
             device.ecuFlashingIndicator = false;
             device.isEcuAvailable       = false;
             device.ecuStatus            = false;
             device.ecuStatus1           = 'Check ECU ${device.srNo} connection.';
-            print('  ❌ ECU not connected');
+            print('  ❌ ECU[${device.srNo}] not connected');
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -411,24 +413,23 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkECUHW() async {
     currStatus.value = 'Reading ECU Hardware Number...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: read HW from all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.ecuFlashingIndicator && !device.isflashing) {
           final pids = _getPidByType('HWPN', device.selectedSubModel);
           final res  = await _wifi.getHW(device.ipAddress, device.index, pids);
-          // .NET: stores hardware_part_number and sets isEcuAvailable=true
-          // hw_part_no match check skipped — API field contains wrong data (SW version)
           if (res[0] == 'true') {
             device.hardwarePartNumber = res[1];
             device.isEcuAvailable     = true;
-            print('  ✅ HW: ${res[1]}');
+            print('  ✅ HW[${device.srNo}]: ${res[1]}');
           } else {
             device.ecuStatus      = false;
             device.isEcuAvailable = false;
             device.ecuStatus1     = 'ECU ${device.srNo} HW read failed.';
-            print('  ❌ HW read failed');
+            print('  ❌ HW[${device.srNo}] read failed');
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -447,28 +448,29 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkFlashingStatus() async {
     currStatus.value = 'Checking Flashing Status...';
     try {
-      for (final device in tableInfo) {
-        if (device.isEcuAvailable && !device.isflashing && device.ecuSrNo.isNotEmpty) {
+      // ⚡ PARALLEL: check flash status for all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
+        if (device.isEcuAvailable && !device.isflashing && device.ecuSrNo.isNotEmpty && device.selectedSubModel != null) {
           final res = await http.get(
             Uri.parse('${AppEnvironment.baseUrl}analyze/get-ecu-pfs-status/?serial_no=${device.ecuSrNo}'),
             headers: _headers,
           );
           if (res.statusCode == 200) {
             final results = jsonDecode(res.body)['results'] as List? ?? [];
-            print('📋 FlashStatus ESN=${device.ecuSrNo}: count=${results.length} '
-                'status=${results.isNotEmpty ? results[0]["status"] : "none"}');
+            print('📋 FlashStatus[${device.srNo}] ESN=${device.ecuSrNo}: '
+                'count=${results.length} status=${results.isNotEmpty ? results[0]["status"] : "none"}');
             if (results.isNotEmpty && results[0]['status'] == 'Pass') {
-              // .NET: ecu_status1 = !IsQC ? "ECU X already flashed..." : ecu_status1
+              // .NET: ONLY sets ecu_status1 + ecu_status=false
+              // Does NOT block flash — popup is warning only, user CAN still flash
               device.ecuStatus1 = device.ecuStatus1.isEmpty
                   ? 'ECU ${device.srNo} already flashed with updated file.'
                   : device.ecuStatus1;
               device.ecuStatus = false;
-              print('   → already flashed (Pass)');
+              print('   → ECU[${device.srNo}] already flashed (Pass) — warning only, flash still allowed');
             }
-            // .NET: if status == "Fail" → do nothing
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -494,7 +496,8 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkECUSW() async {
     currStatus.value = 'Reading Software Version...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: read SW version from all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.isEcuAvailable && !device.isflashing) {
           final pids  = _getPidByType('ESWV', device.selectedSubModel);
           final res   = await _wifi.getSW(device.ipAddress, device.index, pids);
@@ -503,16 +506,17 @@ class IndividualFlashController extends GetxController {
           if (res[0] == 'true') {
             device.swVersionBefore = res[1];
             final expected = _matchFromFiles(comDs, 'sw_version');
-            print('  SW: ECU="${res[1]}" API="$expected"');
+            print('  SW[${device.srNo}]: ECU="${res[1]}" API="$expected"');
             if (expected.isNotEmpty && res[1] == expected) {
               device.swMatch = true; device.flashingAvailabel = false;
             } else {
-              device.swMatch = false; device.flashingAvailabel = true;
+              device.swMatch = false;
+              device.flashingAvailabel = true;
               device.fileType = 'Complete';
             }
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -520,7 +524,8 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkCalId() async {
     currStatus.value = 'Reading Calibration Id...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: read CalId from all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.isEcuAvailable && device.selectedSubModel != null && !device.isflashing) {
           final pids  = _getPidByType('CALID', device.selectedSubModel);
           final res   = await _wifi.getCalId(device.ipAddress, device.index, pids);
@@ -544,7 +549,8 @@ class IndividualFlashController extends GetxController {
                 device.flashingAvailabel = false; device.fileType = 'Complete';
                 device.calIdMatch = true;
               } else {
-                device.calIdMatch = false; device.flashingAvailabel = true;
+                device.calIdMatch = false;
+                device.flashingAvailabel = true;
                 device.fileType = 'Calibration';
               }
             } else {
@@ -560,13 +566,14 @@ class IndividualFlashController extends GetxController {
                 device.flashingAvailabel = false; device.fileType = 'Complete';
                 device.calIdMatch = true;
               } else {
-                device.calIdMatch = false; device.flashingAvailabel = true;
+                device.calIdMatch = false;
+                device.flashingAvailabel = true;
                 device.fileType = 'Complete';
               }
             }
           }
         }
-      }
+      }));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
   }
@@ -574,7 +581,8 @@ class IndividualFlashController extends GetxController {
   Future<void> _checkCVN() async {
     currStatus.value = 'Reading CVN...';
     try {
-      for (final device in tableInfo) {
+      // ⚡ PARALLEL: read CVN from all ECUs simultaneously
+      await Future.wait(tableInfo.map((device) async {
         if (device.isEcuAvailable && device.selectedSubModel != null && !device.isflashing) {
           final pids  = _getPidByType('CVN', device.selectedSubModel);
           final res   = await _wifi.getCVN(device.ipAddress, device.index, pids);
@@ -603,25 +611,73 @@ class IndividualFlashController extends GetxController {
               device.cvnMatch  = false;
             }
           } else {
-            // CVN read failed — ECU tired/locked, but still enable flash
-            // .NET: play_button always enabled after CVN step
+            // CVN read failed — still enable flash
             print('  CVN read failed — enabling play button anyway');
             device.flashingAvailabel = true;
             device.fileType = calDs != null ? 'Calibration' : 'Complete';
           }
-          // .NET: ALWAYS enable play button after CVN step (match, no-match, or error)
+          // .NET: ALWAYS enable play button after CVN step
           device.playButtonDisable = false;
           device.playButtonColor   = _orange;
-        }
-      }
+      }}));
       tableInfo.refresh();
     } finally { currStatus.value = ''; }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  START ALL FLASH — ⚡ PARALLEL: flash all eligible ECUs at once
+  //  4 ECUs × 1.5min = 1.5min total (instead of 6min sequential)
+  // ══════════════════════════════════════════════════════════
+  Future<void> startAllFlash() async {
+    // Get all eligible devices (play button enabled, not already flashing)
+    final eligible = tableInfo.where((d) =>
+        !d.playButtonDisable && !d.isflashing && d.flashingAvailabel).toList();
+
+    if (eligible.isEmpty) {
+      print('⚡ startAllFlash: no eligible devices');
+      return;
+    }
+
+    print('⚡ startAllFlash: ${eligible.length} ECUs flashing in parallel');
+
+    // Prepare all devices first (assign files, update UI)
+    for (final item in eligible) {
+      item.playButtonDisable = true; item.playButtonColor = Colors.grey;
+      item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
+      item.progress = 0; item.isflashing = true;
+
+      final sub = item.selectedSubModel;
+      if (sub != null && sub.ecuSubmodel.isNotEmpty) {
+        if (sub.ecuSubmodel[0].callibrationDataset == null) {
+          item.jsonFile = item.downComFile;
+          item.seqFile  = item.downComSeqfile;
+          item.fileUrl  = item.downComFileUrl;
+        } else if (item.fileType == 'Complete') {
+          item.jsonFile = item.downComFile;
+          item.seqFile  = item.downComSeqfile;
+          item.fileUrl  = item.downComFileUrl;
+        } else {
+          item.jsonFile = item.downCalFile;
+          item.seqFile  = item.downCalSeqfile;
+          item.fileUrl  = item.downCalFileUrl;
+        }
+      }
+    }
+    tableInfo.refresh();
+
+    // ⚡ Flash all simultaneously — each on its own dongle/socket
+    await Future.wait(
+      eligible.map((item) => _startFlash(item)),
+    );
+
+    print('⚡ startAllFlash: all ${eligible.length} ECUs completed');
   }
 
   // ══════════════════════════════════════════════════════════
   //  START FLASH — mirrors StartIndivisualFlashingCommand + StartFlash
   // ══════════════════════════════════════════════════════════
   Future<void> startIndividualFlash(IndividualRowModel item) async {
+    // .NET: StartIndivisualFlashingCommand — no flashingAvailabel check, always proceeds
     try {
       item.playButtonDisable = true; item.playButtonColor = Colors.grey;
       item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
@@ -746,31 +802,38 @@ class IndividualFlashController extends GetxController {
       device.reportColor       = Colors.yellow;
       final result = flashResult.isNotEmpty ? flashResult : 'ERROR';
 
+      // .NET EXACT ORDER:
+      // 1. Check result → set color → (3s sleep if success)
+      // 2. GeneratePdfWrapper (reads PIDs — timer still running)
+      // 3. timer.Stop() AFTER pdf/pid reads
+      // 4. Set status text + percent + progress
+      // 5. Enable/disable buttons
+
       if (result == 'NOERROR') {
         print('   ✅ FLASH SUCCESS!');
         await Future.delayed(const Duration(seconds: 3)); // .NET: Thread.Sleep(3000)
         device.flashingSuccess = true;
         device.statusColor     = Colors.green;
+        device.status          = 'Flashing completed'; // show green status NOW
+        device.flashPercent    = '100.0%';
+        device.progress        = 1.0;
       } else {
         print('   ❌ Flash failed: $result');
-        device.statusColor = Colors.red; // .NET: status_color = Color.Red immediately
+        device.statusColor = Colors.red;
+        device.status      = result; // show error status
       }
       tableInfo.refresh();
 
       // .NET: GeneratePdfWrapper — timer STILL RUNNING during this
+      // PIDs are read here, after values update on screen
       await _getPdfContentAndPost(device, [flashResult]);
 
-      // .NET: timer.Stop(); percentTimer.Stop(); stopWatch.Stop() — AFTER GeneratePdfWrapper
+      // .NET: timer.Stop() AFTER GeneratePdfWrapper completes
       timerSeconds?.cancel(); timerPercent?.cancel(); stopwatch.stop();
       timerSeconds = null; timerPercent = null;
 
-      // .NET: status = NOERROR ? "Flashing completed" : flashing[0]
-      device.status = result == 'NOERROR' ? 'Flashing completed' : result;
-
-      // .NET: FlashPercent = NOERROR ? "100.0%" : keep last value (whatever % was)
+      // Enable buttons after everything
       if (result == 'NOERROR') {
-        device.flashPercent      = '100.0%';
-        device.progress          = 1.0;
         device.playButtonDisable = true;
         device.playButtonColor   = Colors.grey;
         final scanQr = sub?.scanQrCode ?? false;
@@ -779,7 +842,6 @@ class IndividualFlashController extends GetxController {
           device.printButtonColor   = _orange;
         }
       }
-      // FAIL: flashPercent keeps last value (e.g. "0.0%" for INVALIDKEY)
 
       tableInfo.refresh();
     } catch (e) {

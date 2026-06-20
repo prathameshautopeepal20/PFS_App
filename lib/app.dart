@@ -176,9 +176,9 @@
 
 //       /* -------- Get Storage Initialize -----------    */
 //       await GetStorage.init();
-      
+
 //       // Note: Removed the hardcoded setActiveUser to allow your persistent login logic to work correctly
-//       // await AppPreferences.setActiveUser("abc@autopeepal.com"); 
+//       // await AppPreferences.setActiveUser("abc@autopeepal.com");
 
 //       /* --------Setting configuration parameters-----------    */
 //       _devMode = devMode;
@@ -255,8 +255,9 @@ class App {
   static App instance = App();
 
   // Only use platform channel on mobile
-  static const MethodChannel platform =
-      MethodChannel('atpl_flashing_app/native');
+  static const MethodChannel platform = MethodChannel(
+    'atpl_flashing_app/native',
+  );
 
   final String _appName = 'ATPM PGS';
   static String jwtToken = '';
@@ -266,7 +267,6 @@ class App {
   static String firmwareVersion = '';
   static String sessionId = '';
   static String currentUserId = '';
-
 
   bool? _devMode;
   bool? _appLog;
@@ -324,14 +324,14 @@ class App {
         // await GetStorage.init();
         // print('✅ Step 4: GetStorage initialized');
 
-// ── GetStorage ────────────────────────────────────────
-try {
-  await GetStorage.init();
-  print('✅ Step 4: GetStorage initialized');
-} catch (e) {
-  print('⚠️ GetStorage skipped: $e');
-  // continue anyway
-}
+        // ── GetStorage ────────────────────────────────────────
+        try {
+          await GetStorage.init();
+          print('✅ Step 4: GetStorage initialized');
+        } catch (e) {
+          print('⚠️ GetStorage skipped: $e');
+          // continue anyway
+        }
 
         // ── App config ────────────────────────────────────────
         _devMode = devMode;
@@ -407,12 +407,13 @@ class MyApp extends StatelessWidget {
       getPages: AppRoutes.routes,
       // Shows errors on screen instead of blank white
       builder: (context, child) {
-        return child ?? const Center(
-          child: Text(
-            'App failed to load',
-            style: TextStyle(color: Colors.red, fontSize: 20),
-          ),
-        );
+        return child ??
+            const Center(
+              child: Text(
+                'App failed to load',
+                style: TextStyle(color: Colors.red, fontSize: 20),
+              ),
+            );
       },
     );
   }
