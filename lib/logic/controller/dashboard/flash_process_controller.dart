@@ -101,30 +101,38 @@ class EcuSubmodel {
     'seedkeyAlgoValue': seedkeyAlgoValue,
   };
 
-  factory EcuSubmodel.fromJson(Map<String, dynamic> j) => EcuSubmodel(
-        id: j['id'] ?? 0,
-        ecu: j['ecu'] ?? 0,
-        completeDataset: j['complete_dataset'] != null
-            ? DatasetFile.fromJson(j['complete_dataset'])
-            : null,
-        callibrationDataset: j['callibration_dataset'] != null
-            ? DatasetFile.fromJson(j['callibration_dataset'])
-            : null,
-        completeStatus:    j['complete_status']    ?? '',
-        calibrationStatus: j['calibration_status'] ?? '',
-        pidDatasets:       j['pid_datasets'] as List? ?? [],
-        txHeader:          j['tx_header']     ?? j['ecu_tx_header']  ?? '7DF',
-        rxHeader:          j['rx_header']     ?? j['ecu_rx_header']  ?? '7E8',
-        protocolName:      j['protocol']?['name']
-                        ?? j['protocol_name']
-                        ?? 'ISO15765_500KB_11BIT_CAN',
-        protocolAutopeepal: j['protocol']?['autopeepal']
-                         ?? j['protocol_autopeepal']
-                         ?? '02',
-        seedkeyAlgoValue:   j['seedkeyalgo_fn_index']?['value']
-                         ?? j['seedkey_algo']
-                         ?? 'RE_SEEDKEY_EPM44',
-      );
+  factory EcuSubmodel.fromJson(Map<String, dynamic> j) {
+    final rawSeedkey = j['seedkeyalgo_fn_index'];
+    print('🔑🔑🔑 RAW seedkeyalgo_fn_index = ' + rawSeedkey.toString() + '  TYPE = ' + rawSeedkey.runtimeType.toString());
+    final seedVal = (rawSeedkey is Map
+        ? rawSeedkey['value']?.toString()
+        : rawSeedkey?.toString())
+        ?? j['seedkey_algo']?.toString()
+        ?? 'RE_SEEDKEY_EPM44';
+    print('🔑🔑🔑 RESOLVED seedkeyAlgoValue = ' + seedVal);
+    return EcuSubmodel(
+      id: j['id'] ?? 0,
+      ecu: j['ecu'] ?? 0,
+      completeDataset: j['complete_dataset'] != null
+          ? DatasetFile.fromJson(j['complete_dataset'])
+          : null,
+      callibrationDataset: j['callibration_dataset'] != null
+          ? DatasetFile.fromJson(j['callibration_dataset'])
+          : null,
+      completeStatus:    j['complete_status']    ?? '',
+      calibrationStatus: j['calibration_status'] ?? '',
+      pidDatasets:       j['pid_datasets'] as List? ?? [],
+      txHeader:          j['tx_header']     ?? j['ecu_tx_header']  ?? '7DF',
+      rxHeader:          j['rx_header']     ?? j['ecu_rx_header']  ?? '7E8',
+      protocolName:      j['protocol']?['name']
+                      ?? j['protocol_name']
+                      ?? 'ISO15765_500KB_11BIT_CAN',
+      protocolAutopeepal: j['protocol']?['autopeepal']
+                       ?? j['protocol_autopeepal']
+                       ?? '02',
+      seedkeyAlgoValue: seedVal,
+    );
+  }
 }
 
 class StationInfo {

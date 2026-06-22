@@ -595,23 +595,25 @@ class ECUCalculateSeedkey {
   // }
   List<int>? getREKey(int s, int ek) {
     try {
-      // Convert everything to BigInt for safe 64-bit arithmetic
-      BigInt sBig = BigInt.from(s) & BigInt.from(0xFFFFFFFF);
-      BigInt ekBig = BigInt.parse(ek.toRadixString(16), radix: 16);
+      // Use BigInt for safe 64-bit arithmetic (Dart int is 64-bit but signed)
+      BigInt sBig  = BigInt.from(s)  & BigInt.parse('FFFFFFFF', radix: 16);
+      BigInt ekBig = BigInt.parse(ek.toRadixString(16).padLeft(16, '0'), radix: 16);
 
-      BigInt revS = BigInt.from(reverseBits32(s));
-      BigInt notS = (~sBig) & BigInt.from(0xFFFFFFFF);
-
-      BigInt rotL14S =
-          ((sBig << 14) | (sBig >> (32 - 14))) & BigInt.from(0xFFFFFFFF);
-      BigInt rotR10S =
-          ((sBig >> 10) | (sBig << (32 - 10))) & BigInt.from(0xFFFFFFFF);
+      // ── All intermediate values matching .NET exactly ──
+      BigInt revS      = BigInt.from(reverseBits32(sBig.toInt()));
+      BigInt notS      = (~sBig)  & BigInt.parse('FFFFFFFF', radix: 16);
+      BigInt rotL14S   = ((sBig << 14) | (sBig >> (32 - 14))) & BigInt.parse('FFFFFFFF', radix: 16);
+      BigInt rotR10S   = ((sBig >> 10) | (sBig << (32 - 10))) & BigInt.parse('FFFFFFFF', radix: 16);
       BigInt revRotR10S = BigInt.from(reverseBits32(rotR10S.toInt()));
+      BigInt notEK     = (~ekBig) & BigInt.parse('FFFFFFFFFFFFFFFF', radix: 16);
+      BigInt revEK     = BigInt.from(reverseBits64(ekBig.toInt() & 0x7FFFFFFFFFFFFFFF));
+      BigInt rotL31EK  = ((ekBig << 31) | (ekBig >> (64 - 31))) & BigInt.parse('FFFFFFFFFFFFFFFF', radix: 16);
+      BigInt rotL13EK  = ((ekBig << 13) | (ekBig >> (64 - 13))) & BigInt.parse('FFFFFFFFFFFFFFFF', radix: 16);
+      BigInt notRotL13EK = (~rotL13EK) & BigInt.parse('FFFFFFFFFFFFFFFF', radix: 16);
 
-      BigInt notEK = (~ekBig) & BigInt.parse("FFFFFFFFFFFFFFFF", radix: 16);
-      BigInt revEK = BigInt.from(reverseBits64(ek));
-
-      // Build concatenated byte array
+      // ── Build B string EXACTLY as .NET (128 hex chars = 64 bytes) ──
+      // .NET: S(8)+EK(16)+revS(8)+notEK(16)+rotL14S(8)+revEK(16)+notS(8)
+      //      +rotL31EK(16)+S(8)+notRotL13EK(16)+revRotR10S(8)
       String bHex =
           sBig.toRadixString(16).padLeft(8, '0') +
           ekBig.toRadixString(16).padLeft(16, '0') +
@@ -619,62 +621,54 @@ class ECUCalculateSeedkey {
           notEK.toRadixString(16).padLeft(16, '0') +
           rotL14S.toRadixString(16).padLeft(8, '0') +
           revEK.toRadixString(16).padLeft(16, '0') +
-          notS.toRadixString(16).padLeft(8, '0');
+          notS.toRadixString(16).padLeft(8, '0') +
+          rotL31EK.toRadixString(16).padLeft(16, '0') +   // ✅ FIXED: was missing
+          sBig.toRadixString(16).padLeft(8, '0') +         // ✅ FIXED: S repeated
+          notRotL13EK.toRadixString(16).padLeft(16, '0') + // ✅ FIXED: was missing
+          revRotR10S.toRadixString(16).padLeft(8, '0');    // ✅ FIXED: was missing
+      // bHex is now 128 hex chars = 64 bytes ✅
 
+      // ── Reverse byte array (.NET: Array.Reverse(BArray)) ──
       List<int> bArray = hexStringToBytes(bHex).reversed.toList();
 
-      // RIPEMD160 hash
+      // ── RIPEMD160 hash ──
       RIPEMD160Digest ripemd = RIPEMD160Digest();
       ripemd.update(Uint8List.fromList(bArray), 0, bArray.length);
       Uint8List d = Uint8List(ripemd.digestSize);
       ripemd.doFinal(d, 0);
 
+      // ── Reverse D (.NET: Array.Reverse(D)) ──
       List<int> revD = d.reversed.toList();
-      String dBin = revD.map((b) => b.toRadixString(2).padLeft(8, '0')).join();
 
-      // Extract bits for key
+      // ── Convert to binary nibble-by-nibble (matching .NET exactly) ──
+      // .NET: revDHex = ByteArrayToString(D)
+      //       revDBin = each hex char → 4-bit binary
+      //       DBin    = StringReverse(revDBin)
+      String revDHex = revD.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      String revDBin = revDHex.split('').map((c) =>
+          int.parse(c, radix: 16).toRadixString(2).padLeft(4, '0')).join();
+      String dBin = revDBin.split('').reversed.join(); // StringReverse
+
+      // ── Extract bits at positions → revKString ──
       List<int> positions = [
-        19,
-        74,
-        59,
-        78,
-        0,
-        26,
-        89,
-        77,
-        144,
-        107,
-        47,
-        134,
-        61,
-        88,
-        58,
-        135,
-        121,
-        95,
-        29,
-        158,
-        81,
-        54,
-        70,
-        115,
-        46,
-        3,
-        44,
-        123,
-        39,
-        157,
-        30,
-        90,
+        19, 74, 59, 78,  0, 26, 89, 77,
+       144,107, 47,134, 61, 88, 58,135,
+       121, 95, 29,158, 81, 54, 70,115,
+        46,  3, 44,123, 39,157, 30, 90,
       ];
+      String revKString = positions.map((i) => dBin[i]).join();
 
-      String keyBits = positions.map((i) => dBin[i]).join();
-      keyBits = keyBits.split('').reversed.join();
+      // ── StringReverse(revKString) = KeyString (.NET exact step) ──
+      String keyString = revKString.split('').reversed.join();
 
-      int k = int.parse(keyBits, radix: 2);
+      // ── Parse → uint32 → big-endian 4 bytes ──
+      // .NET: K = Convert.ToUInt32(KeyString,2)
+      //       KBytes = BitConverter.GetBytes(K) → little-endian
+      //       Array.Reverse(KBytes) → big-endian
+      int k = int.parse(keyString, radix: 2);
       return uint32ToBytes(k).reversed.toList();
     } catch (e) {
-      print("❌ getREKey error: $e");
+      print('❌ getREKey error: $e');
       return null;
     }
   }
