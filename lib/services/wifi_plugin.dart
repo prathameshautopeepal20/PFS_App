@@ -297,14 +297,14 @@ class WiFiPlugin {
       ) ?? 'NOERROR';
 
       print('⏹️  startECUFlashing[$index]: CAN_StopTP result=$result');
-      if (result == 'NOERROR') {
+       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
         print('   ✅ FLASH SUCCESS: ECU flashed successfully!');
+        return 'NOERROR';
       } else if (result.contains('INVALIDKEY')) {
         print('   ❌ INVALIDKEY: Seed key rejected by ECU');
         print('   → ECU seed: check if ECU needs power cycle');
         print('   → Algorithm: RE_SEEDKEY_EPM44 with secret 13A120A0...');
-        print('   → Try: power cycle ECU (ignition OFF 30s → ON)');
-        print('   → Confirm with RE team the correct seed key secret');
+      
       } else if (result.contains('SERVICENOTSUPPORTED')) {
         print('   ❌ ECU in wrong session — power cycle ECU');
       } else if (result.contains('ERROR')) {

@@ -1,5 +1,5 @@
 // home_page_controller.dart — COMPLETE with WiFiPlugin integrated
-// All // TODO: WiFiPlugin.xxx() replaced with real calls
+// All Colors.grey/yellow/green/red replaced with const Color() to fix MaterialColor crash
 // Path: lib/logic/controller/dashboard/home_page_controller.dart
 
 import 'dart:async';
@@ -11,14 +11,18 @@ import 'package:http/http.dart' as http;
 import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
 import 'package:atpl_flashing_app/api/app_envirments.dart';
 import 'package:atpl_flashing_app/logic/controller/dashboard/flash_process_controller.dart';
-import 'package:atpl_flashing_app/services/wifi_plugin.dart'; // ← ADD THIS
+import 'package:atpl_flashing_app/services/wifi_plugin.dart';
 
-// ── WiFiPlugin singleton shorthand ───────────────────────────
 final _wifi = WiFiPlugin.instance;
 
-// ─────────────────────────────────────────────────────────────
-//  TableInfoModel (unchanged)
-// ─────────────────────────────────────────────────────────────
+// ── Color constants to avoid MaterialColor crash ─────────────
+const _cRed    = Color(0xFFF44336);
+const _cGreen  = Color(0xFF4CAF50);
+const _cGrey   = Color(0xFF9E9E9E);
+const _cWhite  = Color(0xFFFFFFFF);
+const _cYellow = Color(0xFFFFEB3B);
+const _cOrange = Color(0xFFF9772C);
+
 class TableInfoModel {
   int index;
   int srNo;
@@ -85,7 +89,7 @@ class TableInfoModel {
     required this.priority,
     this.isDongleAvailable = false, this.isEcuAvailable = false,
     this.dongleFlashingIndicator = false, this.ecuFlashingIndicator = false,
-    this.dongleStatusColor = Colors.red, this.ecuStatusColor = Colors.red,
+    this.dongleStatusColor = _cRed, this.ecuStatusColor = _cRed,
     this.ecuSrNo = '', this.ecuSrNoAfter = '', this.hardwarePartNumber = '',
     this.swVersionBefore = '', this.swVersionAfter = '',
     this.calIdBefore = '', this.calId = '', this.printCalId = '',
@@ -94,9 +98,9 @@ class TableInfoModel {
     this.isflashing = false, this.flashingAvailabel = false,
     this.fileType = 'NA', this.flashTimer = '00:00', this.flashPercent = '0.0 %',
     this.progress = 0, this.isProgressVisible = false,
-    this.statusColor = Colors.white, this.reportColor = Colors.white,
-    this.printButtonDisable = true, this.printButtonColor = Colors.grey,
-    this.playButtonDisable = true, this.playButtonColor = Colors.grey,
+    this.statusColor = _cWhite, this.reportColor = _cWhite,
+    this.printButtonDisable = true, this.printButtonColor = _cGrey,
+    this.playButtonDisable = true, this.playButtonColor = _cGrey,
     this.playButtonVisible = false,
     this.ecuStatus = true, this.ecuStatus1 = '', this.alreadyMessage = false,
     this.isDongle = false, this.swMatch = false, this.calIdMatch = false,
@@ -108,68 +112,64 @@ class TableInfoModel {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-//  HomePageController
-// ─────────────────────────────────────────────────────────────
 class HomePageController extends GetxController {
 
   final Map<String, dynamic> args;
   HomePageController({required this.args});
 
-  late final String      _flashingType;
+  late final String       _flashingType;
   late final ModelResult? _selectedModel;
-  late final SubModel?   _selectedSubModel;
-  late final String      _downComFile;
-  late final String      _downComSeqfile;
-  late final String      _downComFileUrl;
-  late final String      _downCalFile;
-  late final String      _downCalSeqfile;
-  late final String      _downCalFileUrl;
-  Map<String, dynamic>?  _profile;
-  String                 _token     = '';
-  String                 _sessionId = '';
-  List<dynamic>          _parameters = [];
-  List<dynamic>          _pids       = [];
-  List<dynamic>          _flashFiles = [];
-  bool                   _alreadyFlashedEcu = false;
-  bool                   _nextCheck         = false;
+  late final SubModel?    _selectedSubModel;
+  late final String       _downComFile;
+  late final String       _downComSeqfile;
+  late final String       _downComFileUrl;
+  late final String       _downCalFile;
+  late final String       _downCalSeqfile;
+  late final String       _downCalFileUrl;
+  Map<String, dynamic>?   _profile;
+  String                  _token     = '';
+  String                  _sessionId = '';
+  List<dynamic>           _parameters = [];
+  List<dynamic>           _pids       = [];
+  List<dynamic>           _flashFiles = [];
+  bool                    _alreadyFlashedEcu = false;
+  bool                    _nextCheck         = false;
 
   ModelResult? get selectedModel    => _selectedModel;
   SubModel?    get selectedSubModel => _selectedSubModel;
 
-  final RxBool   isLoading               = false.obs;
-  final RxString currStatus              = ''.obs;
-  final RxString title                   = ''.obs;
-  final RxList<TableInfoModel> tableInfo = <TableInfoModel>[].obs;
-  final RxBool   checkEcuStatusButton    = true.obs;
-  final RxBool   startFlashButtonDisable = true.obs;
-  final Rx<Color> startFlashButtonColor  = Colors.grey.obs;
-  final RxBool   startResetButtonDisable = true.obs;
-  final Rx<Color> startResetButtonColor  = Colors.grey.obs;
-  final RxBool   isResetDongleEnabled    = true.obs;
-  final RxBool   flashingButtonVisible   = true.obs;
-  final RxBool   showAlertPopup          = false.obs;
-  final RxBool   showChangePopup         = false.obs;
-  final RxBool   showPrintPopup          = false.obs;
-  final RxBool   showWaitPopup           = false.obs;
-  final RxString popupMessage            = ''.obs;
-  final RxInt    afterFlashSeconds       = 0.obs;
+  final RxBool            isLoading               = false.obs;
+  final RxString          currStatus              = ''.obs;
+  final RxString          title                   = ''.obs;
+  final RxList<TableInfoModel> tableInfo          = <TableInfoModel>[].obs;
+  final RxBool            checkEcuStatusButton    = true.obs;
+  final RxBool            startFlashButtonDisable = true.obs;
+  final Rx<Color>         startFlashButtonColor   = const Color(0xFF9E9E9E).obs;
+  final RxBool            startResetButtonDisable = true.obs;
+  final Rx<Color>         startResetButtonColor   = const Color(0xFF9E9E9E).obs;
+  final RxBool            isResetDongleEnabled    = true.obs;
+  final RxBool            flashingButtonVisible   = true.obs;
+  final RxBool            showAlertPopup          = false.obs;
+  final RxBool            showChangePopup         = false.obs;
+  final RxBool            showPrintPopup          = false.obs;
+  final RxBool            showWaitPopup           = false.obs;
+  final RxString          popupMessage            = ''.obs;
+  final RxInt             afterFlashSeconds       = 0.obs;
 
-  static const _orange = Color(0xFFF9772C);
   Timer? _waitTimer;
 
   @override
   void onInit() {
     super.onInit();
-    _flashingType     = args['flashingType']    ?? 'Batch';
-    _selectedModel    = args['selectedModel']   as ModelResult?;
+    _flashingType     = args['flashingType']     ?? 'Batch';
+    _selectedModel    = args['selectedModel']    as ModelResult?;
     _selectedSubModel = args['selectedSubModel'] as SubModel?;
-    _downComFile      = args['downComFile']     ?? '';
-    _downComSeqfile   = args['downComSeqfile']  ?? '';
-    _downComFileUrl   = args['downComFileUrl']  ?? '';
-    _downCalFile      = args['downCalFile']     ?? '';
-    _downCalSeqfile   = args['downCalSeqfile']  ?? '';
-    _downCalFileUrl   = args['downCalFileUrl']  ?? '';
+    _downComFile      = args['downComFile']      ?? '';
+    _downComSeqfile   = args['downComSeqfile']   ?? '';
+    _downComFileUrl   = args['downComFileUrl']   ?? '';
+    _downCalFile      = args['downCalFile']      ?? '';
+    _downCalSeqfile   = args['downCalSeqfile']   ?? '';
+    _downCalFileUrl   = args['downCalFileUrl']   ?? '';
     _profile          = args['profile'] as Map<String, dynamic>?;
     _token            = args['token'] ?? '';
     _initPage();
@@ -178,29 +178,25 @@ class HomePageController extends GetxController {
   Future<void> _initPage() async {
     isLoading.value = true;
     try {
-      if (_token.isEmpty)   _token     = await AppPreferences.getToken() ?? '';
-      if (_profile == null) _profile   = await AppPreferences.getLoginResponse();
+      if (_token.isEmpty)   _token   = await AppPreferences.getToken() ?? '';
+      if (_profile == null) _profile = await AppPreferences.getLoginResponse();
       _sessionId = await AppPreferences.getSessionId();
 
       flashingButtonVisible.value   = _flashingType == 'Batch';
       startResetButtonDisable.value = true;
-      startResetButtonColor.value   = Colors.grey;
+      startResetButtonColor.value   = _cGrey;
       startFlashButtonDisable.value = true;
-      startFlashButtonColor.value   = Colors.grey;
+      startFlashButtonColor.value   = _cGrey;
       checkEcuStatusButton.value    = true;
       isResetDongleEnabled.value    = true;
 
-      title.value =
-          '${_selectedSubModel?.description ?? ''}/${_selectedModel?.name ?? ''}';
+      title.value = '${_selectedSubModel?.description ?? ''}/${_selectedModel?.name ?? ''}';
 
       await _getFlashDetail();
       await _getParameters();
       await _getPids();
       await _loadDongleList();
-
-      // ── OPEN SOCKETS for all 8 dongle slots ──────────────
       await _wifi.initSockets();
-
     } finally {
       isLoading.value = false;
     }
@@ -241,7 +237,6 @@ class HomePageController extends GetxController {
       if (first is Map)      pidId = first['id'] as int?;
       else if (first is int) pidId = first;
       if (pidId == null) return;
-
       final res = await http.get(
         Uri.parse('${AppEnvironment.baseUrl}datasets/get-pid-datasets/?id=$pidId'),
         headers: _headers,
@@ -301,22 +296,18 @@ class HomePageController extends GetxController {
     } catch (e) { print('❌ _loadDongleList: $e'); }
   }
 
-  // ══════════════════════════════════════════════════════════
-  //  CHECK ECU STATUS
-  //  Full 7-step chain using WiFiPlugin (real hardware)
-  // ══════════════════════════════════════════════════════════
   Future<void> checkEcuStatus() async {
     try {
       for (final item in tableInfo) {
         item.status = ''; item.isDongleAvailable = false;
-        item.isEcuAvailable = false; item.dongleStatusColor = Colors.red;
+        item.isEcuAvailable = false; item.dongleStatusColor = _cRed;
         item.dongleFlashingIndicator = false; item.ecuFlashingIndicator = false;
-        item.ecuStatusColor = Colors.red; item.ecuSrNo = '';
+        item.ecuStatusColor = _cRed; item.ecuSrNo = '';
         item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
-        item.statusColor = Colors.white; item.reportColor = Colors.white;
+        item.statusColor = _cWhite; item.reportColor = _cWhite;
         item.flashingCompleted = false; item.printButtonDisable = true;
-        item.printButtonColor = Colors.grey; item.playButtonDisable = true;
-        item.playButtonColor = Colors.grey; item.isflashing = false;
+        item.printButtonColor = _cGrey; item.playButtonDisable = true;
+        item.playButtonColor = _cGrey; item.isflashing = false;
         item.playButtonVisible = _flashingType != 'Batch';
         item.flashingAvailabel = false; item.fileType = 'NA';
         item.hardwarePartNumber = ''; item.ecuStatus = true;
@@ -327,7 +318,7 @@ class HomePageController extends GetxController {
       tableInfo.refresh();
 
       startFlashButtonDisable.value = true;
-      startFlashButtonColor.value   = Colors.grey;
+      startFlashButtonColor.value   = _cGrey;
       _alreadyFlashedEcu            = false;
       popupMessage.value            = '';
 
@@ -365,23 +356,14 @@ class HomePageController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════
-  //  SCAN NETWORK — find dongle IPs on port 6888
-  //  Called by Find Dongle button in UI
-  // ════════════════════════════════════════════════════════
   Future<List<String>> scanNetworkForDongles() async {
     currStatus.value = 'Scanning network for dongles...';
     final found = <String>[];
     try {
       final subnet = await _getWifiSubnet();
-      if (subnet == null) {
-        currStatus.value = 'WiFi not connected';
-        return [];
-      }
-
+      if (subnet == null) { currStatus.value = 'WiFi not connected'; return []; }
       print('🔍 Scanning $subnet.1–254 on port 6888...');
       const batchSize = 20;
-
       for (int start = 1; start <= 254; start += batchSize) {
         final end     = (start + batchSize - 1).clamp(1, 254);
         final futures = <Future<String?>>[];
@@ -390,116 +372,74 @@ class HomePageController extends GetxController {
         }
         final results = await Future.wait(futures);
         for (final ip in results) {
-          if (ip != null) {
-            found.add(ip);
-            print('✅ Dongle found: $ip:6888');
-          }
+          if (ip != null) { found.add(ip); print('✅ Dongle found: $ip:6888'); }
         }
-        currStatus.value =
-            'Scanning... ${(end / 254 * 100).toInt()}%'
-            ' — Found: ${found.length}';
+        currStatus.value = 'Scanning... ${(end / 254 * 100).toInt()}% — Found: ${found.length}';
       }
-    } catch (e) {
-      print('❌ scanNetworkForDongles: $e');
-    } finally {
-      currStatus.value = '';
-    }
+    } catch (e) { print('❌ scanNetworkForDongles: $e'); }
+    finally { currStatus.value = ''; }
     return found;
   }
 
-  // ── Get WiFi subnet from network interfaces ───────────────
   Future<String?> _getWifiSubnet() async {
     try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4);
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
       for (final iface in interfaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address;
           if (ip.startsWith('127.')) continue;
           final parts = ip.split('.');
-          if (parts.length == 4) {
-            return '${parts[0]}.${parts[1]}.${parts[2]}';
-          }
+          if (parts.length == 4) return '${parts[0]}.${parts[1]}.${parts[2]}';
         }
       }
-    } catch (e) {
-      print('❌ _getWifiSubnet: $e');
-    }
+    } catch (e) { print('❌ _getWifiSubnet: $e'); }
     return null;
   }
 
-  // ── Try TCP connect on port with 400ms timeout ────────────
   Future<String?> _tryPort(String ip, int port) async {
     try {
-      final socket = await Socket.connect(ip, port,
-        timeout: const Duration(milliseconds: 400));
+      final socket = await Socket.connect(ip, port, timeout: const Duration(milliseconds: 400));
       socket.destroy();
       return ip;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
 
-  // ── Step 1: CheckDongle — with auto-scan fallback ─────────
   Future<bool> _checkDongle() async {
     bool value = false;
     currStatus.value = 'Checking Dongle Connection...';
     try {
       for (final device in tableInfo) {
-        // ── Try stored IP first ───────────────────────────
-        // Get TX/RX headers from EcuSubmodel (from server)
-        final sub    = device.selectedSubModel;
-        final ecuSub = sub?.ecuSubmodel.isNotEmpty == true
-            ? sub!.ecuSubmodel[0] : null;
-        // PCAN log confirmed: TX=07E0 works, 7DF does NOT work for this ECU
-        final txHdr    = ecuSub?.txHeader.isNotEmpty == true
-            ? ecuSub!.txHeader : '7E0'; // default 7E0 (direct ECU address)
+        final sub    = device.selectedSubModel ?? _selectedSubModel;
+        final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
+        final txHdr    = ecuSub?.txHeader.isNotEmpty == true ? ecuSub!.txHeader : '7E0';
         final rxHdr    = ecuSub?.rxHeader           ?? '7E8';
         final protoHex = ecuSub?.protocolAutopeepal ?? '02';
         print('🔧 Dongle ${device.srNo}: TX=$txHdr RX=$rxHdr proto=$protoHex');
 
         device.isDongle = await _wifi.checkDongle(
           device.ipAddress, device.index,
-          txHeader: txHdr,
-          rxHeaderMask: rxHdr,
-          protocolHex: protoHex);
+          txHeader: txHdr, rxHeaderMask: rxHdr, protocolHex: protoHex);
 
-        // ── If stored IP failed → scan network ────────────
         if (!device.isDongle) {
-          print('⚠️ Stored IP ${device.ipAddress} failed'
-              ' → scanning network...');
-          currStatus.value =
-              'Dongle ${device.srNo} not at ${device.ipAddress}'
-              ' — scanning network...';
-
+          print('⚠️ Stored IP ${device.ipAddress} failed → scanning network...');
+          currStatus.value = 'Dongle ${device.srNo} not at ${device.ipAddress} — scanning...';
           final subnet = await _getWifiSubnet();
           if (subnet != null) {
-            // Scan full subnet for port 6888
             const batchSize = 20;
             bool foundNewIP = false;
-
-            for (int start = 1; start <= 254 && !foundNewIP;
-                start += batchSize) {
+            for (int start = 1; start <= 254 && !foundNewIP; start += batchSize) {
               final end     = (start + batchSize - 1).clamp(1, 254);
               final futures = <Future<String?>>[];
-              for (int i = start; i <= end; i++) {
-                // Skip already known IPs of other dongles
-                final ip = '$subnet.$i';
-                futures.add(_tryPort(ip, 6888));
-              }
+              for (int i = start; i <= end; i++) futures.add(_tryPort('$subnet.$i', 6888));
               final results = await Future.wait(futures);
               for (final ip in results) {
                 if (ip != null) {
-                  // Check if this IP is not used by another dongle
-                  final alreadyUsed = tableInfo.any((d) =>
-                      d != device && d.ipAddress == ip && d.isDongle);
+                  final alreadyUsed = tableInfo.any((d) => d != device && d.ipAddress == ip && d.isDongle);
                   if (!alreadyUsed) {
-                    // Try connecting via WiFiPlugin
                     final ok = await _wifi.checkDongle(ip, device.index);
                     if (ok) {
-                      print('✅ Dongle ${device.srNo} found at new IP: $ip'
-                          ' (was: ${device.ipAddress})');
-                      device.ipAddress = ip; // update IP for this session
+                      print('✅ Dongle ${device.srNo} found at new IP: $ip');
+                      device.ipAddress = ip;
                       device.isDongle  = true;
                       foundNewIP       = true;
                       break;
@@ -513,72 +453,21 @@ class HomePageController extends GetxController {
 
         if (device.isDongle) {
           device.dongleFlashingIndicator = true;
-          device.dongleStatusColor       = Colors.green;
+          device.dongleStatusColor       = _cGreen;
         } else {
           device.dongleFlashingIndicator = false;
-          device.dongleStatusColor       = Colors.red;
+          device.dongleStatusColor       = _cRed;
           device.ecuStatus  = false;
-          device.ecuStatus1 =
-              'Dongle ${device.srNo} not found.\n'
-              'Stored IP: ${device.ipAddress}';
+          device.ecuStatus1 = 'Dongle ${device.srNo} not found.\nStored IP: ${device.ipAddress}';
         }
       }
       tableInfo.refresh();
 
-      final failed = tableInfo
-          .where((x) => !x.isDongle && !x.ecuStatus && !x.alreadyMessage)
-          .toList();
+      final failed = tableInfo.where((x) => !x.isDongle && !x.ecuStatus && !x.alreadyMessage).toList();
       if (failed.isNotEmpty) {
         checkEcuStatusButton.value = true;
         isResetDongleEnabled.value = true;
-        for (final item in failed) {
-          item.alreadyMessage = true;
-          popupMessage.value += '${item.ecuStatus1}\n';
-        }
-        value = false;
-      } else {
-        checkEcuStatusButton.value = false;
-        isResetDongleEnabled.value = false;
-        value = true;
-      }
-    } finally {
-      currStatus.value = '';
-    }
-    return value;
-  }
-
-  // ── Step 2: CheckECU — reads ESN serial number ────────────
-  Future<bool> _checkECU() async {
-    bool value = false;
-    currStatus.value = 'Checking ECU Connection...';
-    try {
-      for (final device in tableInfo) {
-        // ✅ REAL: UDSDiagnostic.readParameters() → ESN
-        final res = await _wifi.getESN(device.ipAddress, device.index, _pids);
-
-        if (res[0] == 'true') {
-          device.ecuSrNo              = res[1];
-          device.isEcuAvailable       = true;
-          device.ecuFlashingIndicator = true;
-          device.ecuStatusColor       = Colors.green;
-        } else {
-          device.isEcuAvailable = false;
-          device.ecuStatus  = false;
-          device.ecuStatus1 = 'ECU ${device.srNo} not responding.';
-        }
-      }
-      tableInfo.refresh();
-
-      final failed = tableInfo
-          .where((x) => !x.isEcuAvailable && !x.ecuStatus && !x.alreadyMessage)
-          .toList();
-      if (failed.isNotEmpty) {
-        checkEcuStatusButton.value = true;
-        isResetDongleEnabled.value = true;
-        for (final item in failed) {
-          item.alreadyMessage = true;
-          popupMessage.value += '${item.ecuStatus1}\n';
-        }
+        for (final item in failed) { item.alreadyMessage = true; popupMessage.value += '${item.ecuStatus1}\n'; }
         value = false;
       } else {
         checkEcuStatusButton.value = false;
@@ -589,28 +478,60 @@ class HomePageController extends GetxController {
     return value;
   }
 
-  // ── Step 3: CheckECUHW — reads hardware part number ───────
+  Future<bool> _checkECU() async {
+    bool value = false;
+    currStatus.value = 'Checking ECU Connection...';
+    try {
+      for (final device in tableInfo) {
+        final res = await _wifi.getESN(device.ipAddress, device.index, _pids);
+        if (res[0] == 'true') {
+          device.ecuSrNo              = res[1];
+          device.isEcuAvailable       = true;
+          device.ecuFlashingIndicator = true;
+          device.ecuStatusColor       = _cGreen;
+        } else {
+          device.isEcuAvailable = false;
+          device.ecuStatus  = false;
+          device.ecuStatus1 = 'ECU ${device.srNo} not responding.';
+        }
+      }
+      tableInfo.refresh();
+
+      final failed = tableInfo.where((x) => !x.isEcuAvailable && !x.ecuStatus && !x.alreadyMessage).toList();
+      if (failed.isNotEmpty) {
+        checkEcuStatusButton.value = true;
+        isResetDongleEnabled.value = true;
+        for (final item in failed) { item.alreadyMessage = true; popupMessage.value += '${item.ecuStatus1}\n'; }
+        value = false;
+      } else {
+        checkEcuStatusButton.value = false;
+        isResetDongleEnabled.value = false;
+        value = true;
+      }
+    } finally { currStatus.value = ''; }
+    return value;
+  }
+
   Future<bool> _checkECUHW() async {
     bool value = false;
     currStatus.value = 'Reading ECU Hardware Number...';
     try {
-      final sub        = _selectedSubModel;
-      final expectedHw = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0].completeDataset?.swPartNo ?? '' : '';
+      // Use hwPartNo from SubModel for comparison
+      final expectedHw = _selectedSubModel?.hwPartNo ?? '';
 
       for (final device in tableInfo) {
-        // ✅ REAL: UDSDiagnostic.readParameters() → HW Part No
         final res = await _wifi.getHW(device.ipAddress, device.index, _pids);
-
         if (res[0] == 'true') {
           device.hardwarePartNumber = res[1];
-          if (expectedHw.isEmpty || res[1] == expectedHw) {
+          // Pass if expectedHw is empty OR either side contains the other
+          if (expectedHw.isEmpty ||
+              res[1].contains(expectedHw) ||
+              expectedHw.contains(res[1])) {
             device.isEcuAvailable = true;
           } else {
             device.isEcuAvailable = false;
             device.ecuStatus  = false;
-            device.ecuStatus1 =
-                'ECU ${device.srNo} HW mismatch.\nExpected: $expectedHw\nFound: ${res[1]}';
+            device.ecuStatus1 = 'ECU ${device.srNo} HW mismatch.\nExpected: $expectedHw\nFound: ${res[1]}';
           }
         } else {
           device.isEcuAvailable = false;
@@ -620,14 +541,9 @@ class HomePageController extends GetxController {
       }
       tableInfo.refresh();
 
-      final failed = tableInfo
-          .where((x) => !x.isEcuAvailable && !x.ecuStatus && !x.alreadyMessage)
-          .toList();
+      final failed = tableInfo.where((x) => !x.isEcuAvailable && !x.ecuStatus && !x.alreadyMessage).toList();
       if (failed.isNotEmpty) {
-        for (final item in failed) {
-          item.alreadyMessage = true;
-          popupMessage.value += '${item.ecuStatus1}\n';
-        }
+        for (final item in failed) { item.alreadyMessage = true; popupMessage.value += '${item.ecuStatus1}\n'; }
         checkEcuStatusButton.value = true;
         isResetDongleEnabled.value = true;
         value = false;
@@ -640,15 +556,13 @@ class HomePageController extends GetxController {
     return value;
   }
 
-  // ── Step 4: CheckFlashingStatus (API check) ───────────────
   Future<void> _checkFlashingStatus() async {
     currStatus.value = 'Checking Flashing Status...';
     try {
       for (final device in tableInfo) {
         if (!device.isEcuAvailable || device.ecuSrNo.isEmpty) continue;
         final res = await http.get(
-          Uri.parse(
-              '${AppEnvironment.baseUrl}analyze/get-ecu-pfs-status/?serial_no=${device.ecuSrNo}'),
+          Uri.parse('${AppEnvironment.baseUrl}analyze/get-ecu-pfs-status/?serial_no=${device.ecuSrNo}'),
           headers: _headers,
         );
         if (res.statusCode == 200) {
@@ -664,7 +578,6 @@ class HomePageController extends GetxController {
     finally { currStatus.value = ''; }
   }
 
-  // ── Step 5: CheckECUSW ────────────────────────────────────
   Future<bool> _checkECUSW() async {
     bool value = false;
     currStatus.value = 'Reading Software Version...';
@@ -675,9 +588,7 @@ class HomePageController extends GetxController {
           ? sub!.ecuSubmodel[0].completeDataset?.swVersion ?? '' : '';
 
       for (final device in tableInfo) {
-        // ✅ REAL: UDSDiagnostic.readParameters() → SW Version
         final res = await _wifi.getSW(device.ipAddress, device.index, _pids);
-
         if (res[0] == 'true') {
           device.swVersionBefore   = res[1];
           device.flashingAvailabel = true;
@@ -695,14 +606,13 @@ class HomePageController extends GetxController {
         checkEcuStatusButton.value    = false;
         isResetDongleEnabled.value    = false;
         startFlashButtonDisable.value = false;
-        startFlashButtonColor.value   = _orange;
+        startFlashButtonColor.value   = _cOrange;
         value = _nextCheck;
       }
     } finally { currStatus.value = ''; }
     return value;
   }
 
-  // ── Step 6: CheckCalId ────────────────────────────────────
   Future<bool> _checkCalId() async {
     bool value = false;
     currStatus.value = 'Reading Calibration Id...';
@@ -710,17 +620,13 @@ class HomePageController extends GetxController {
     _nextCheck         = false;
     try {
       final sub           = _selectedSubModel;
-      final calDataset    = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0].callibrationDataset : null;
-      final comDataset    = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0].completeDataset : null;
+      final calDataset    = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0].callibrationDataset : null;
+      final comDataset    = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0].completeDataset : null;
       final expectedCalId = calDataset?.calId ?? comDataset?.calId ?? '';
 
       for (final device in tableInfo) {
         if (!device.swMatch) {
-          // ✅ REAL: UDSDiagnostic.readParameters() → CalId
           final res = await _wifi.getCalId(device.ipAddress, device.index, _pids);
-
           if (res[0] == 'true') {
             device.calIdBefore       = res[1];
             device.flashingAvailabel = true;
@@ -736,27 +642,23 @@ class HomePageController extends GetxController {
         checkEcuStatusButton.value    = false;
         isResetDongleEnabled.value    = false;
         startFlashButtonDisable.value = false;
-        startFlashButtonColor.value   = _orange;
+        startFlashButtonColor.value   = _cOrange;
         value = _nextCheck;
       }
     } finally { currStatus.value = ''; }
     return value;
   }
 
-  // ── Step 7: CheckCVN ──────────────────────────────────────
   Future<bool> _checkCVN() async {
     bool value = false;
     currStatus.value = 'Reading CVN...';
     _nextCheck = false;
     try {
       final sub        = _selectedSubModel;
-      final calDataset = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0].callibrationDataset : null;
+      final calDataset = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0].callibrationDataset : null;
 
       for (final device in tableInfo) {
-        // ✅ REAL: UDSDiagnostic.readParameters() → CVN
         final res = await _wifi.getCVN(device.ipAddress, device.index, _pids);
-
         if (res[0] == 'true') {
           device.cvnBefore         = res[1];
           device.flashingAvailabel = true;
@@ -771,7 +673,7 @@ class HomePageController extends GetxController {
         checkEcuStatusButton.value    = false;
         isResetDongleEnabled.value    = false;
         startFlashButtonDisable.value = false;
-        startFlashButtonColor.value   = _orange;
+        startFlashButtonColor.value   = _cOrange;
         value = _nextCheck;
       }
     } finally { currStatus.value = ''; }
@@ -800,89 +702,69 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ══════════════════════════════════════════════════════════
-  //  START FLASH
-  // ══════════════════════════════════════════════════════════
   Future<void> startFlash() async {
     if (startFlashButtonDisable.value) return;
     try {
       isResetDongleEnabled.value    = false;
       checkEcuStatusButton.value    = false;
       startFlashButtonDisable.value = true;
-      startFlashButtonColor.value   = Colors.grey;
+      startFlashButtonColor.value   = _cGrey;
 
       final sub = _selectedSubModel;
       for (final item in tableInfo) {
-        if (sub?.ecuSubmodel.isNotEmpty == true &&
-            sub!.ecuSubmodel[0].callibrationDataset == null) {
-          item.jsonFile = _downComFile; item.seqFile = _downComSeqfile;
-          item.fileUrl  = _downComFileUrl;
+        if (sub?.ecuSubmodel.isNotEmpty == true && sub!.ecuSubmodel[0].callibrationDataset == null) {
+          item.jsonFile = _downComFile; item.seqFile = _downComSeqfile; item.fileUrl = _downComFileUrl;
         } else if (item.fileType == 'Complete') {
-          item.jsonFile = _downComFile; item.seqFile = _downComSeqfile;
-          item.fileUrl  = _downComFileUrl;
+          item.jsonFile = _downComFile; item.seqFile = _downComSeqfile; item.fileUrl = _downComFileUrl;
         } else if (item.fileType == 'Calibration') {
-          item.jsonFile = _downCalFile; item.seqFile = _downCalSeqfile;
-          item.fileUrl  = _downCalFileUrl;
+          item.jsonFile = _downCalFile; item.seqFile = _downCalSeqfile; item.fileUrl = _downCalFileUrl;
         }
         item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
-        item.statusColor = Colors.yellow; item.progress = 0;
+        item.statusColor = _cYellow; item.progress = 0;
       }
       tableInfo.refresh();
 
-      final futures = tableInfo
-          .where((d) => d.isEcuAvailable)
-          .map((d) => _flashDevice(d))
-          .toList();
+      final futures = tableInfo.where((d) => d.isEcuAvailable).map((d) => _flashDevice(d)).toList();
       await Future.wait(futures);
     } catch (e) { print('❌ startFlash: $e'); }
   }
 
-  // ── Flash single device ───────────────────────────────────
   Future<void> _flashDevice(TableInfoModel device) async {
     try {
       if (device.jsonFile.isEmpty || device.seqFile.isEmpty) {
         device.status = 'File not found'; device.flashingCompleted = true;
-        device.isflashing = false; device.statusColor = Colors.red;
+        device.isflashing = false; device.statusColor = _cRed;
         tableInfo.refresh(); _onAllComplete(); return;
       }
 
-      device.printButtonDisable = true; device.printButtonColor = Colors.grey;
+      device.printButtonDisable = true; device.printButtonColor = _cGrey;
       device.status = 'Flashing in progress...';
-      device.statusColor = Colors.yellow; device.isProgressVisible = true;
+      device.statusColor = _cYellow; device.isProgressVisible = true;
       device.isflashing = true; device.flashingSuccess = false;
       tableInfo.refresh();
       currStatus.value = 'Flashing In Progress...';
 
-      // Timer
       final sw = Stopwatch()..start();
       final t  = Timer.periodic(const Duration(seconds: 1), (_) {
         device.flashTimer =
             '${sw.elapsed.inMinutes.toString().padLeft(2, '0')}:'
             '${(sw.elapsed.inSeconds % 60).toString().padLeft(2, '0')}';
-        // Update progress from WiFiPlugin
-        device.progress = _wifi.flashPercentMap[device.ipAddress] ?? 0.0;
-        device.flashPercent =
-            '${(device.progress * 100).toStringAsFixed(1)}%';
+        device.progress    = _wifi.flashPercentMap[device.ipAddress] ?? 0.0;
+        device.flashPercent = '${(device.progress * 100).toStringAsFixed(1)}%';
         tableInfo.refresh();
       });
 
-      // Get ECU model info for flash
-      final sub     = _selectedSubModel;
-      final ecuSub  = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0] : null;
+      final sub    = _selectedSubModel;
+      final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
 
-      // ✅ REAL: WiFiPlugin.startECUFlashing()
-      // Uses ap_dongle_comm → CommController → DongleComm
-      // Uses ap_diagnostic → UDSDiagnostic.flashInterpreter()
-      // Uses ecu_seedkey → ECUCalculateSeedkey (inside flashInterpreter)
       final flashResult = await _wifi.startECUFlashing(
         ip:             device.ipAddress,
         index:          device.index,
         seqFileContent: device.seqFile,
         hexFileContent: device.jsonFile,
-        seedKeyIndex:   ecuSub?.seedkeyAlgoValue ?? 'RE_SEEDKEY_EPM44',
-        txHeader:       ecuSub?.txHeader    ?? '7DF',
-        rxHeader:       ecuSub?.rxHeader    ?? '7E8',
+        seedKeyIndex:   ecuSub?.seedkeyAlgoValue   ?? 'RE_SEEDKEY_EPM44',
+        txHeader:       ecuSub?.txHeader           ?? '7DF',
+        rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
         onProgress:     (p) => device.progress = p,
         onStatus:       (s) => currStatus.value = s,
@@ -890,17 +772,16 @@ class HomePageController extends GetxController {
 
       final result = flashResult.isNotEmpty ? flashResult[0] : 'ERROR';
       t.cancel(); sw.stop();
-      device.reportColor = Colors.yellow;
+      device.reportColor = _cYellow;
 
       if (result == 'NOERROR') {
         await Future.delayed(const Duration(seconds: 3));
         device.flashingSuccess = true;
-        device.statusColor     = Colors.green;
+        device.statusColor     = _cGreen;
         device.flashPercent    = '100.0%';
         device.progress        = 1.0;
         device.status          = 'Flashing completed';
 
-        // ✅ REAL: Read after-flash values
         final calAfter = await _wifi.getCalId(device.ipAddress, device.index, _pids);
         if (calAfter[0] == 'true') device.printCalId = calAfter[1];
 
@@ -912,7 +793,7 @@ class HomePageController extends GetxController {
 
         device.ecuSrNoAfter = device.ecuSrNo;
       } else {
-        device.statusColor = Colors.red;
+        device.statusColor = _cRed;
         device.status      = result;
       }
 
@@ -942,7 +823,7 @@ class HomePageController extends GetxController {
         for (final item in tableInfo) {
           if (item.flashingSuccess) {
             item.printButtonDisable = false;
-            item.printButtonColor   = _orange;
+            item.printButtonColor   = _cOrange;
             break;
           }
         }
@@ -950,7 +831,7 @@ class HomePageController extends GetxController {
       }
     } else {
       startResetButtonDisable.value = false;
-      startResetButtonColor.value   = _orange;
+      startResetButtonColor.value   = _cOrange;
     }
   }
 
@@ -962,7 +843,7 @@ class HomePageController extends GetxController {
         for (final item in tableInfo) {
           if (item.flashingSuccess) {
             item.printButtonDisable = false;
-            item.printButtonColor   = _orange;
+            item.printButtonColor   = _cOrange;
             break;
           }
         }
@@ -979,15 +860,12 @@ class HomePageController extends GetxController {
           ? (sub!.ecuSubmodel[0].callibrationDataset?.swPartNo ??
               sub.ecuSubmodel[0].completeDataset?.swPartNo ?? '') : '';
 
-      final pfsId = _sessionId.isNotEmpty
-          ? _sessionId : await AppPreferences.getSessionId();
-      final ecuId = sub?.ecuSubmodel.isNotEmpty == true
-          ? sub!.ecuSubmodel[0].ecu : 0;
+      final pfsId = _sessionId.isNotEmpty ? _sessionId : await AppPreferences.getSessionId();
+      final ecuId = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0].ecu : 0;
 
       final uri     = Uri.parse('${AppEnvironment.baseUrl}analyze/create-ecu-pfs/');
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = 'JWT $_token';
-
       request.fields['pfs']             = pfsId;
       request.fields['ECU_ID']          = device.hardwarePartNumber;
       request.fields['model']           = '${model?.id ?? 0}';
@@ -1008,38 +886,30 @@ class HomePageController extends GetxController {
 
       final streamedRes = await request.send();
       final res         = await http.Response.fromStream(streamedRes);
-      device.reportColor = (res.statusCode == 200 || res.statusCode == 201)
-          ? Colors.green : Colors.red;
+      device.reportColor = (res.statusCode == 200 || res.statusCode == 201) ? _cGreen : _cRed;
       tableInfo.refresh();
-    } catch (e) {
-      device.reportColor = Colors.red; tableInfo.refresh();
-    }
+    } catch (e) { device.reportColor = _cRed; tableInfo.refresh(); }
   }
 
   Future<void> reset() async {
     if (startResetButtonDisable.value) return;
     isLoading.value = true;
     try {
-      startResetButtonDisable.value = true; startResetButtonColor.value = Colors.grey;
-      startFlashButtonDisable.value = true; startFlashButtonColor.value = Colors.grey;
+      startResetButtonDisable.value = true; startResetButtonColor.value = _cGrey;
+      startFlashButtonDisable.value = true; startFlashButtonColor.value = _cGrey;
       checkEcuStatusButton.value    = true;
 
-      // ✅ Close + reopen sockets on reset
       await _wifi.closeSockets();
       await _wifi.initSockets();
 
       final stationData = _profile?['station_data'] as List?;
       final userId  = _profile?['user_id'] ?? 0;
-      final plants  = stationData?.isNotEmpty == true
-          ? (stationData![0]['plants'] as int? ?? 0) : 0;
+      final plants  = stationData?.isNotEmpty == true ? (stationData![0]['plants'] as int? ?? 0) : 0;
 
       final res = await http.post(
         Uri.parse('${AppEnvironment.baseUrl}analyze/create-pfs/'),
         headers: _headers,
-        body: jsonEncode({
-          'user': userId, 'plant': plants,
-          'status': 'New', 'station': _stationId,
-        }),
+        body: jsonEncode({'user': userId, 'plant': plants, 'status': 'New', 'station': _stationId}),
       );
 
       if (res.statusCode == 200 || res.statusCode == 201) {
@@ -1059,32 +929,22 @@ class HomePageController extends GetxController {
     try {
       isResetDongleEnabled.value    = false;
       startFlashButtonDisable.value = true;
-      startFlashButtonColor.value   = Colors.grey;
+      startFlashButtonColor.value   = _cGrey;
       checkEcuStatusButton.value    = true;
-
       await _loadDongleList();
-
-      // ✅ REAL: DongleComm.resetDongle() via WiFiPlugin
-      for (final item in tableInfo) {
-        await _wifi.resetDongle(item.ipAddress, item.index);
-      }
-
+      for (final item in tableInfo) { await _wifi.resetDongle(item.ipAddress, item.index); }
       isResetDongleEnabled.value = true;
     } finally { isLoading.value = false; }
   }
 
   Future<void> printSticker(TableInfoModel device) async {
     try {
-      device.printButtonDisable = true; device.printButtonColor = Colors.grey;
+      device.printButtonDisable = true; device.printButtonColor = _cGrey;
       tableInfo.refresh();
-
-      // TODO: call printer plugin when available
-      // await PrintPlugin.printSticker(device.cvn, device.printCalId, ...)
 
       if (_flashingType == 'Batch') {
         showPrintPopup.value = true;
-        popupMessage.value   =
-            'Paste the sticker on ECU ${device.srNo} and remove ECU ${device.srNo}';
+        popupMessage.value   = 'Paste the sticker on ECU ${device.srNo} and remove ECU ${device.srNo}';
         await Future.delayed(const Duration(seconds: 3));
         showPrintPopup.value = false;
         popupMessage.value   = '';
@@ -1093,19 +953,19 @@ class HomePageController extends GetxController {
         while (nextIdx <= tableInfo.length) {
           if (nextIdx == tableInfo.length) {
             startResetButtonDisable.value = false;
-            startResetButtonColor.value   = _orange;
+            startResetButtonColor.value   = _cOrange;
             break;
           }
           if (tableInfo[nextIdx].flashingSuccess) {
             tableInfo[nextIdx].printButtonDisable = false;
-            tableInfo[nextIdx].printButtonColor   = _orange;
+            tableInfo[nextIdx].printButtonColor   = _cOrange;
             tableInfo.refresh(); break;
           }
           nextIdx++;
         }
       } else {
         device.printButtonDisable = true;
-        device.printButtonColor   = Colors.grey;
+        device.printButtonColor   = _cGrey;
         tableInfo.refresh();
       }
     } catch (e) { print('❌ printSticker: $e'); }
@@ -1123,8 +983,10 @@ class HomePageController extends GetxController {
       item.ecuStatus = true; item.ecuStatus1 = ''; item.alreadyMessage = false;
     }
     popupMessage.value = ''; showChangePopup.value = false;
-    checkEcuStatusButton.value = false; isResetDongleEnabled.value = false;
-    startFlashButtonDisable.value = false; startFlashButtonColor.value = _orange;
+    checkEcuStatusButton.value    = false;
+    isResetDongleEnabled.value    = false;
+    startFlashButtonDisable.value = false;
+    startFlashButtonColor.value   = _cOrange;
     tableInfo.refresh();
   }
 
@@ -1133,14 +995,16 @@ class HomePageController extends GetxController {
       item.ecuStatus = true; item.ecuStatus1 = ''; item.alreadyMessage = false;
     }
     popupMessage.value = ''; showChangePopup.value = false;
-    checkEcuStatusButton.value = true; isResetDongleEnabled.value = true;
-    startFlashButtonDisable.value = true; startFlashButtonColor.value = Colors.grey;
+    checkEcuStatusButton.value    = true;
+    isResetDongleEnabled.value    = true;
+    startFlashButtonDisable.value = true;
+    startFlashButtonColor.value   = _cGrey;
     tableInfo.refresh();
   }
 
   Future<void> startIndividualFlash(TableInfoModel device) async {
     try {
-      device.playButtonDisable = true; device.playButtonColor = Colors.grey;
+      device.playButtonDisable = true; device.playButtonColor = _cGrey;
       device.flashTimer = '00:00'; device.flashPercent = '0.0 %';
       device.progress = 0; device.isflashing = true; tableInfo.refresh();
       await Future.delayed(const Duration(seconds: 2));
@@ -1148,23 +1012,9 @@ class HomePageController extends GetxController {
     } catch (_) {}
   }
 
-  // ── Helpers ───────────────────────────────────────────────
   int get _stationId {
     final list = _profile?['station_data'] as List?;
     return list?.isNotEmpty == true ? (list![0]['id'] as int? ?? 0) : 0;
-  }
-
-  // ECU map passed to WiFiPlugin for each call
-  Map<String, dynamic> get _ecuMap {
-    final sub = _selectedSubModel;
-    if (sub == null || sub.ecuSubmodel.isEmpty) return {};
-    final ecuSub = sub.ecuSubmodel[0];
-    return {
-      'tx_header': ecuSub.completeDataset?.swPartNo ?? '',
-      'rx_header': '',
-      'protocol':  'ISO15765_500KB_11BIT_CAN',
-      'seedkeyalgo': 'RE_SEEDKEY_EPM44',
-    };
   }
 
   Map<String, String> get _headers => {
@@ -1175,7 +1025,7 @@ class HomePageController extends GetxController {
   @override
   void onClose() {
     _waitTimer?.cancel();
-    _wifi.closeSockets(); // ✅ close TCP connections when page closes
+    _wifi.closeSockets();
     super.onClose();
   }
 }

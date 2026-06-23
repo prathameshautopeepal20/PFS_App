@@ -20,7 +20,6 @@ import 'package:ap_diagnostic/enum/writeParameter.dart';
 import 'package:ap_dongle_comm/utils/model/responseArrayStatusModel.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
 
-
 class UDSDiagnostic {
   final DongleComm _dongleComm;
   final ECUCalculateSeedkey _calculateSeedKey;
@@ -2199,7 +2198,8 @@ class UDSDiagnostic {
               int copyLength;
               String lenStr = parts[1].replaceAll('-', '').trim();
               // Try decimal first (like .NET Convert.ToInt32), fallback hex
-              copyLength = int.tryParse(lenStr) ?? int.tryParse(lenStr, radix: 16) ?? 0;
+              copyLength =
+                  int.tryParse(lenStr) ?? int.tryParse(lenStr, radix: 16) ?? 0;
 
               Uint8List copyArray = Uint8List(0);
 
@@ -2209,13 +2209,15 @@ class UDSDiagnostic {
               } else if (reference.contains("json_strt_addr") ||
                   reference.contains("ecu_memmap_strt_addr")) {
                 int index = reference.contains("[i]")
-                    ? loopModelList.last.i!
+                    ? (isLoopPresent ? loopModelList.last.i! : currSectorIndex)
                     : int.tryParse(
                             RegExp(r'\d+').firstMatch(reference)?.group(0) ??
                                 '0',
                           ) ??
                           0;
 
+                if (index >= sectorData.length) index = sectorData.length - 1;
+                if (index < 0) index = 0;
                 currSectorIndex = index;
                 String addr = reference.contains("json_strt_addr")
                     ? sectorData[index].jsonStartAddress ?? "0"
@@ -2227,13 +2229,15 @@ class UDSDiagnostic {
               } else if (reference.contains("json_end_addr") ||
                   reference.contains("ecu_memmap_end_addr")) {
                 int index = reference.contains("[i]")
-                    ? loopModelList.last.i!
+                    ? (isLoopPresent ? loopModelList.last.i! : currSectorIndex)
                     : int.tryParse(
                             RegExp(r'\d+').firstMatch(reference)?.group(0) ??
                                 '0',
                           ) ??
                           0;
 
+                if (index >= sectorData.length) index = sectorData.length - 1;
+                if (index < 0) index = 0;
                 currSectorIndex = index;
                 String addr = reference.contains("json_end_addr")
                     ? sectorData[index].jsonEndAddress ?? "0"
@@ -2245,13 +2249,15 @@ class UDSDiagnostic {
               } else if (reference.contains("json_sector_len") ||
                   reference.contains("ecu_memmap_len")) {
                 int index = reference.contains("[i]")
-                    ? loopModelList.last.i!
+                    ? (isLoopPresent ? loopModelList.last.i! : currSectorIndex)
                     : int.tryParse(
                             RegExp(r'\d+').firstMatch(reference)?.group(0) ??
                                 '0',
                           ) ??
                           0;
 
+                if (index >= sectorData.length) index = sectorData.length - 1;
+                if (index < 0) index = 0;
                 currSectorIndex = index;
                 int start = int.parse(
                   reference.contains("json_sector_len")
@@ -2274,13 +2280,15 @@ class UDSDiagnostic {
                 );
               } else if (reference.contains("json_checksum")) {
                 int index = reference.contains("[i]")
-                    ? loopModelList.last.i!
+                    ? (isLoopPresent ? loopModelList.last.i! : currSectorIndex)
                     : int.tryParse(
                             RegExp(r'\d+').firstMatch(reference)?.group(0) ??
                                 '0',
                           ) ??
                           0;
 
+                if (index >= sectorData.length) index = sectorData.length - 1;
+                if (index < 0) index = 0;
                 currSectorIndex = index;
                 copyArray = Uint8List.fromList(
                   hex.decode(
@@ -2300,7 +2308,7 @@ class UDSDiagnostic {
               // Always keeps FIRST copyLength bytes (truncates from end)
               // No MSB/LSB distinction - same for ALL references including 'key'
               if (copyArray.length > copyLength) {
-                copyArray = copyArray.sublist(0, copyLength);
+                copyArray = copyArray.sublist(copyArray.length - copyLength);
               }
 
               // Resize/Pad to fit copyLength exactly
@@ -2340,6 +2348,17 @@ class UDSDiagnostic {
             print(
               "--------- reprogrammingResponse ERROR ------------: ${reprogrammingResponse?.ecuResponseStatus}",
             );
+            // Skip to next repeatend/sector instead of stopping
+            if (reprogrammingResponse?.ecuResponseStatus == 
+                "ECUERROR_GENERALPROGRAMMINGFAILURE") {
+              // Skip remaining commands until repeatend
+              while (i < lineData.length - 1) {
+                i++;
+                String skipLine = lineData[i].replaceAll('\r', '').trim();
+                if (skipLine.startsWith("repeatend")) break;
+              }
+              continue;
+            }
             return reprogrammingResponse?.ecuResponseStatus ?? "ERROR";
           }
           if (command == "sendroutine") {
@@ -2738,7 +2757,7 @@ class UDSDiagnostic {
           String transferInfo = info.substring(ind2 + 1);
           List<String> transferSplitData = transferInfo.split('+');
 
-          int sectorFrameTransferLen = 2000;
+          int sectorFrameTransferLen = 4093;
 
           int index = isLoopPresent ? loopModelList.last.i! : currSectorIndex;
           Uint8List sectorDataArray = Uint8List.fromList(
@@ -2748,15 +2767,15 @@ class UDSDiagnostic {
             sectorData[index].jsonStartAddress!,
             radix: 16,
           );
+          int actualDataLen = sectorDataArray.length;
           int sectorNumBytes =
               int.parse(sectorData[index].jsonEndAddress!, radix: 16) -
-              sectorStartAddr +
+              int.parse(sectorData[index].jsonStartAddress!, radix: 16) +
               1;
-
           int offset = 0;
-          while (offset < sectorNumBytes) {
-            int chunkLen = (sectorNumBytes - offset) < sectorFrameTransferLen
-                ? (sectorNumBytes - offset)
+          while (offset < actualDataLen) {
+            int chunkLen = (actualDataLen - offset) < sectorFrameTransferLen
+                ? (actualDataLen - offset)
                 : sectorFrameTransferLen;
 
             BytesBuilder frameBuilder = BytesBuilder(copy: false);
@@ -2794,6 +2813,7 @@ class UDSDiagnostic {
                   radix: 16,
                 );
                 ByteData bd = ByteData(4)..setUint32(0, chunkLen);
+
                 Uint8List lenBytes = bd.buffer.asUint8List();
                 frameBuilder.add(
                   lenBytes.sublist(lenBytes.length - copyLength),
@@ -2801,7 +2821,7 @@ class UDSDiagnostic {
               }
             }
 
-            Uint8List finalFrame = frameBuilder.toBytes();
+           Uint8List finalFrame = frameBuilder.toBytes();
             var response = await _dongleComm.can2xTxRx(
               finalFrame.length,
               hex.encode(finalFrame),
@@ -2817,207 +2837,93 @@ class UDSDiagnostic {
             blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
           }
         }
-        //         else if (command == "sendbulkdata") {
-        //   List<String> splitInfo = info.split(',');
-        //   int blkSeqCnt = int.parse(splitInfo[1]);
-        //   int ind1 = info.indexOf(',');
-        //   int ind2 = info.indexOf(',', ind1 + 1);
-        //   String transferInfo = info.substring(ind2 + 1);
-        //   List<String> transferSplitData = transferInfo.split('+');
-        //   // Override or force the frame length to 2000 bytes
-        //   int sectorFrameTransferLen = 2000;
-        //   int index = isLoopPresent ? loopModelList.last.i! : currSectorIndex;
-        //   Uint8List sectorDataArray = Uint8List.fromList(
-        //     hex.decode(sectorData[index].jsonData!),
-        //   );
-        //   int sectorStartAddr = int.parse(
-        //     sectorData[index].jsonStartAddress!,
-        //     radix: 16,
-        //   );
-        //   int sectorNumBytes =
-        //       int.parse(sectorData[index].jsonEndAddress!, radix: 16) -
-        //       sectorStartAddr +
-        //       1;
-        //   int offset = 0;
-        //   while (offset < sectorNumBytes) {
-        //     try {
-        //       // This correctly calculates if the remaining data is less than 2000
-        //       int chunkLen = (sectorNumBytes - offset) < sectorFrameTransferLen
-        //           ? (sectorNumBytes - offset)
-        //           : sectorFrameTransferLen;
-        //       BytesBuilder frameBuilder = BytesBuilder(copy: false);
-        //       for (var item in transferSplitData) {
-        //         String trimmed = item.trim();
-        //         if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(trimmed)) {
-        //           frameBuilder.add(hex.decode(trimmed));
-        //         }
-        //         else if (trimmed.contains("bsc")) {
-        //           frameBuilder.addByte(blkSeqCnt & 0xFF);
-        //         }
-        //         else if (trimmed.contains("json_sectordata")) {
-        //           // ✅ SLICING: Takes exactly 'chunkLen' (max 2000) from the offset
-        //           frameBuilder.add(
-        //             sectorDataArray.sublist(offset, offset + chunkLen),
-        //           );
-        //         }
-        //         else if (trimmed.contains("json_strt_addr")) {
-        //           int endIndex = trimmed.indexOf('>');
-        //           String bracketString = trimmed.substring(1, endIndex);
-        //           int copyLength = int.parse(bracketString.split(',')[1], radix: 16);
-        //           ByteData bd = ByteData(4)..setUint32(0, sectorStartAddr);
-        //           Uint8List addrBytes = bd.buffer.asUint8List();
-        //           if (addrBytes.length > copyLength) {
-        //             addrBytes = addrBytes.sublist(addrBytes.length - copyLength);
-        //           }
-        //           frameBuilder.add(addrBytes);
-        //           // ✅ ADDRESS UPDATE: Move the pointer forward by the chunk we just sent
-        //           sectorStartAddr += chunkLen;
-        //         }
-        //         else if (trimmed.contains("sectordatasent")) {
-        //           int endIndex = trimmed.indexOf('>');
-        //           String bracketString = trimmed.substring(1, endIndex);
-        //           int copyLength = int.parse(bracketString.split(',')[1], radix: 16);
-        //           ByteData bd = ByteData(4)..setUint32(0, chunkLen);
-        //           Uint8List lenBytes = bd.buffer.asUint8List();
-        //           if (lenBytes.length > copyLength) {
-        //             lenBytes = lenBytes.sublist(lenBytes.length - copyLength);
-        //           }
-        //           frameBuilder.add(lenBytes);
-        //         }
-        //       }
-        //       Uint8List finalFrame = frameBuilder.toBytes();
-        //       // Send to hardware
-        //       var response = await _dongleComm.can2xTxRx(
-        //         finalFrame.length,
-        //         hex.encode(finalFrame),
-        //       );
-        //       if (response.ecuResponseStatus != "NOERROR") {
-        //         return response.ecuResponseStatus;
-        //       }
-        //       // ✅ COUNTER UPDATES
-        //       offset += chunkLen;
-        //       realTimeBytesFlashed += chunkLen;
-        //       blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
-        //     } catch (e) {
-        //       return "exception";
-        //     }
-        //   }
-        // }
-        // else if (command == "sendbulkdata") {
-        //   List<String> splitInfo = info.split(',');
-        //   int blkSeqCnt = int.parse(splitInfo[1]);
-        //   // Extract transfer template after second comma
-        //   int ind1 = info.indexOf(',');
-        //   int ind2 = info.indexOf(',', ind1 + 1);
-        //   String transferInfo = info.substring(ind2 + 1);
-        //   List<String> transferSplitData = transferInfo.split('+');
-        //   // Find json_sectordata to get frame length
-        //   String jsonSectorDataPart = transferSplitData.firstWhere(
-        //     (x) => x.contains("json_sectordata"),
-        //   );
-        //   String sqrBktInfo = jsonSectorDataPart
-        //       .substring(
-        //         jsonSectorDataPart.indexOf('[') + 1,
-        //         jsonSectorDataPart.indexOf(']'),
-        //       )
-        //       .trim();
-        //   int sectorFrameTransferLen = sqrBktInfo.contains(',')
-        //       ? int.parse(sqrBktInfo.split(',')[1].trim(), radix: 16)
-        //       : int.parse(sqrBktInfo, radix: 16);
-        //   int index = isLoopPresent ? loopModelList.last.i! : currSectorIndex;
-        //   Uint8List sectorDataArray = Uint8List.fromList(
-        //     hex.decode(sectorData[index].jsonData!),
-        //   );
-        //   int sectorStartAddr = int.parse(
-        //     sectorData[index].jsonStartAddress!,
-        //     radix: 16,
-        //   );
-        //   int sectorNumBytes =
-        //       int.parse(sectorData[index].jsonEndAddress!, radix: 16) -
-        //       sectorStartAddr +
-        //       1;
-        //   int offset = 0;
-        //   while (offset < sectorNumBytes) {
-        //     try {
-        //       int chunkLen = (sectorNumBytes - offset) < sectorFrameTransferLen
-        //           ? (sectorNumBytes - offset)
-        //           : sectorFrameTransferLen;
-        //       // --- Build frame ---
-        //       BytesBuilder frameBuilder = BytesBuilder(copy: false);
-        //       for (var item in transferSplitData) {
-        //         String trimmed = item.trim();
-        //         // 1️⃣ Fixed Hex bytes
-        //         if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(trimmed)) {
-        //           frameBuilder.add(hex.decode(trimmed));
-        //         }
-        //         // 2️⃣ Block Sequence Counter
-        //         else if (trimmed.contains("bsc")) {
-        //           frameBuilder.addByte(blkSeqCnt & 0xFF);
-        //         }
-        //         // 3️⃣ Firmware data
-        //         else if (trimmed.contains("json_sectordata")) {
-        //           frameBuilder.add(
-        //             sectorDataArray.sublist(offset, offset + chunkLen),
-        //           );
-        //         }
-        //         // 4️⃣ Current Address
-        //         else if (trimmed.contains("json_strt_addr")) {
-        //           int endIndex = trimmed.indexOf('>');
-        //           String bracketString = trimmed.substring(1, endIndex);
-        //           int copyLength = int.parse(
-        //             bracketString.split(',')[1],
-        //             radix: 16,
-        //           );
-        //           ByteData bd = ByteData(4)..setUint32(0, sectorStartAddr);
-        //           Uint8List addrBytes = bd.buffer.asUint8List();
-        //           if (addrBytes.length > copyLength) {
-        //             addrBytes = addrBytes.sublist(
-        //               addrBytes.length - copyLength,
-        //             );
-        //           }
-        //           frameBuilder.add(addrBytes);
-        //           // Increment address by full transfer length (like C#)
-        //           sectorStartAddr += sectorFrameTransferLen;
-        //         }
-        //         // 5️⃣ Bytes sent in this frame
-        //         else if (trimmed.contains("sectordatasent")) {
-        //           int endIndex = trimmed.indexOf('>');
-        //           String bracketString = trimmed.substring(1, endIndex);
-        //           int copyLength = int.parse(
-        //             bracketString.split(',')[1],
-        //             radix: 16,
-        //           );
-        //           ByteData bd = ByteData(4)..setUint32(0, chunkLen);
-        //           Uint8List lenBytes = bd.buffer.asUint8List();
-        //           if (lenBytes.length > copyLength) {
-        //             lenBytes = lenBytes.sublist(lenBytes.length - copyLength);
-        //           }
-        //           frameBuilder.add(lenBytes);
-        //         }
-        //       }
-        //       Uint8List finalFrame = frameBuilder.toBytes();
-        //       // --- Send via Dongle ---
-        //       var response = await _dongleComm.can2xTxRx(
-        //         finalFrame.length,
-        //         hex.encode(finalFrame),
-        //       );
-        //       if (response.ecuResponseStatus != "NOERROR") {
-        //         print("🛑 BULK ERROR: ${response.ecuResponseStatus}");
-        //         return response.ecuResponseStatus;
-        //       }
-        //       // Increment counters
-        //       offset += chunkLen;
-        //       realTimeBytesFlashed += chunkLen;
-        //       blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
-        //       print(
-        //         "🚀 Block $blkSeqCnt sent. Total: $offset / $sectorNumBytes",
-        //       );
-        //     } catch (e) {
-        //       print("❌ Bulk Exception: $e");
-        //       return "exception";
-        //     }
-        //   }
-        // }
+                else if (command == "sendbulkdata") {
+          List<String> splitInfo = info.split(',');
+          int blkSeqCnt = int.parse(splitInfo[1]);
+          int ind1 = info.indexOf(',');
+          int ind2 = info.indexOf(',', ind1 + 1);
+          String transferInfo = info.substring(ind2 + 1);
+          List<String> transferSplitData = transferInfo.split('+');
+          // Override or force the frame length to 2000 bytes
+          int sectorFrameTransferLen = 2000;
+          int index = isLoopPresent ? loopModelList.last.i! : currSectorIndex;
+          Uint8List sectorDataArray = Uint8List.fromList(
+            hex.decode(sectorData[index].jsonData!),
+          );
+          int sectorStartAddr = int.parse(
+            sectorData[index].jsonStartAddress!,
+            radix: 16,
+          );
+          int sectorNumBytes =
+              int.parse(sectorData[index].jsonEndAddress!, radix: 16) -
+              sectorStartAddr +
+              1;
+          int offset = 0;
+          while (offset < sectorNumBytes) {
+            try {
+              // This correctly calculates if the remaining data is less than 2000
+              int chunkLen = (sectorNumBytes - offset) < sectorFrameTransferLen
+                  ? (sectorNumBytes - offset)
+                  : sectorFrameTransferLen;
+              BytesBuilder frameBuilder = BytesBuilder(copy: false);
+              for (var item in transferSplitData) {
+                String trimmed = item.trim();
+                if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(trimmed)) {
+                  frameBuilder.add(hex.decode(trimmed));
+                }
+                else if (trimmed.contains("bsc")) {
+                  frameBuilder.addByte(blkSeqCnt & 0xFF);
+                }
+                else if (trimmed.contains("json_sectordata")) {
+                  // ✅ SLICING: Takes exactly 'chunkLen' (max 2000) from the offset
+                  frameBuilder.add(
+                    sectorDataArray.sublist(offset, offset + chunkLen),
+                  );
+                }
+                else if (trimmed.contains("json_strt_addr")) {
+                  int endIndex = trimmed.indexOf('>');
+                  String bracketString = trimmed.substring(1, endIndex);
+                  int copyLength = int.parse(bracketString.split(',')[1], radix: 16);
+                  ByteData bd = ByteData(4)..setUint32(0, sectorStartAddr);
+                  Uint8List addrBytes = bd.buffer.asUint8List();
+                  if (addrBytes.length > copyLength) {
+                    addrBytes = addrBytes.sublist(addrBytes.length - copyLength);
+                  }
+                  frameBuilder.add(addrBytes);
+                  // ✅ ADDRESS UPDATE: Move the pointer forward by the chunk we just sent
+                  sectorStartAddr += chunkLen;
+                }
+                else if (trimmed.contains("sectordatasent")) {
+                  int endIndex = trimmed.indexOf('>');
+                  String bracketString = trimmed.substring(1, endIndex);
+                  int copyLength = int.parse(bracketString.split(',')[1], radix: 16);
+                  ByteData bd = ByteData(4)..setUint32(0, chunkLen);
+                  Uint8List lenBytes = bd.buffer.asUint8List();
+                  if (lenBytes.length > copyLength) {
+                    lenBytes = lenBytes.sublist(lenBytes.length - copyLength);
+                  }
+                  frameBuilder.add(lenBytes);
+                }
+              }
+              Uint8List finalFrame = frameBuilder.toBytes();
+              // Send to hardware
+              var response = await _dongleComm.can2xTxRx(
+                finalFrame.length,
+                hex.encode(finalFrame),
+              );
+              if (response.ecuResponseStatus != "NOERROR") {
+                return response.ecuResponseStatus;
+              }
+              // ✅ COUNTER UPDATES
+              offset += chunkLen;
+              realTimeBytesFlashed += chunkLen;
+              blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
+            } catch (e) {
+              return "exception";
+            }
+          }
+        }
+        
         //       else if (command == "sendbulkdata") {
         //   List<String> splitInfo = info.split(',');
         //   int seqvarInitValue = int.parse(splitInfo[1]);

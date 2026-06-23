@@ -1,5 +1,6 @@
 // lib/views/screens/dashboard/home_page_screen.dart
 // Fully responsive — Expanded flex, never overflows
+// Fix: tableInfo.toList() in Obx for reactive updates
 
 import 'dart:async';
 import 'dart:io';
@@ -52,7 +53,7 @@ class HomePageScreen extends StatelessWidget {
               ],
             ),
 
-            // Loading
+            // Loading overlay
             Obx(() => controller.isLoading.value
                 ? Container(
                     color: const Color(0xB3000000),
@@ -111,7 +112,6 @@ class _InfoBar extends StatelessWidget {
           value: sub?.ecuSubmodel.isNotEmpty == true
               ? '${sub!.ecuSubmodel[0].ecu}' : '—')),
         const SizedBox(width: 10),
-        // Find Dongle — scans WiFi network for dongle IP
         _FindDongleBtn(controller: controller),
         const SizedBox(width: 8),
         Obx(() => _OrangeBtn(
@@ -158,7 +158,7 @@ class _InfoBox extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════
-//  Table Header — Expanded flex (never overflows)
+//  Table Header
 // ════════════════════════════════════════════════════════════
 class _TableHeader extends StatelessWidget {
   const _TableHeader();
@@ -175,16 +175,13 @@ class _TableHeader extends StatelessWidget {
           top:    BorderSide(color: _cBorder),
           bottom: BorderSide(color: _cOrangD, width: 1.5))),
       child: Row(children: [
-        // Fixed width columns
         _TH(w: 46,  label: '#'),            _Dv(),
         _TH(w: 54,  label: 'State'),        _Dv(),
-        // Flex columns — share remaining space
         Expanded(flex: 5, child: _TH(label: 'Cal Id')),      _Dv(),
         Expanded(flex: 4, child: _TH(label: 'ECU Sr No.')),  _Dv(),
         Expanded(flex: 3, child: _TH(label: 'SW Ver.')),     _Dv(),
         Expanded(flex: 3, child: _TH(label: 'CVN')),         _Dv(),
         Expanded(flex: 4, child: _TH(label: 'Part No.')),    _Dv(),
-        // Fixed width columns
         _TH(w: 56,  label: 'Dongle'),       _Dv(),
         _TH(w: 52,  label: 'ECU'),          _Dv(),
         Expanded(flex: 4, child: _TH(label: 'Progress')),    _Dv(),
@@ -242,10 +239,12 @@ class _TableRows extends StatelessWidget {
                 style: const TextStyle(fontSize: 15, color: _cWhite40)),
             ])));
         }
+        // Use toList() to watch ALL field changes via tableInfo.refresh()
+        final items = controller.tableInfo.toList();
         return ListView.builder(
-          itemCount: controller.tableInfo.length,
+          itemCount: items.length,
           itemBuilder: (_, i) => _DataRow(
-            device: controller.tableInfo[i],
+            device: items[i],
             controller: controller,
             isEven: i % 2 == 0));
       }),
@@ -254,7 +253,7 @@ class _TableRows extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════
-//  Data Row — EXACT same flex structure as header
+//  Data Row — reactive via tableInfo.toList()
 // ════════════════════════════════════════════════════════════
 class _DataRow extends StatelessWidget {
   final TableInfoModel device;
@@ -268,198 +267,200 @@ class _DataRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      controller.tableInfo.length;
-      return Container(
-        decoration: BoxDecoration(
-          color: isEven
-              ? const Color(0xFF131E33)
-              : const Color(0xFF0E1828),
-          border: const Border(
-            bottom: BorderSide(color: _cBorder, width: 0.6))),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    return Container(
+      decoration: BoxDecoration(
+        color: isEven
+            ? const Color(0xFF131E33)
+            : const Color(0xFF0E1828),
+        border: const Border(
+          bottom: BorderSide(color: _cBorder, width: 0.6))),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
 
-              // ── # ─────────────────────────────────────────
-              SizedBox(width: 46, child: Center(
-                child: Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [_cOrange, _cOrangD]),
-                    shape: BoxShape.circle,
-                    boxShadow: const [BoxShadow(
-                      color: Color(0x40F97316), blurRadius: 5)]),
-                  child: Center(child: Text('${device.srNo}',
-                    style: const TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.bold,
-                      color: _cWhite)))))),
-              _Dv(),
-
-              // ── Before/After ──────────────────────────────
-              SizedBox(width: 54, child: Column(children: [
-                Expanded(child: Center(child: _Pill('Before', _cWhite40, _cWhite15))),
-                Container(height: 0.6, color: _cBorder),
-                Expanded(child: Center(child: _Pill('After', _cOrange,
-                  const Color(0x20F97316)))),
-              ])),
-              _Dv(),
-
-              // ── Cal Id ────────────────────────────────────
-              Expanded(flex: 5, child: _BACell(
-                before: device.calIdBefore, after: device.printCalId)),
-              _Dv(),
-
-              // ── ECU Sr No ─────────────────────────────────
-              Expanded(flex: 4, child: _BACell(
-                before: device.ecuSrNo, after: device.ecuSrNoAfter)),
-              _Dv(),
-
-              // ── SW Version ────────────────────────────────
-              Expanded(flex: 3, child: _BACell(
-                before: device.swVersionBefore, after: device.swVersionAfter)),
-              _Dv(),
-
-              // ── CVN ───────────────────────────────────────
-              Expanded(flex: 3, child: _BACell(
-                before: device.cvnBefore, after: device.cvn)),
-              _Dv(),
-
-              // ── Part No ───────────────────────────────────
-              Expanded(flex: 4, child: Center(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(device.swPartNo.isNotEmpty ? device.swPartNo : '—',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 9.5, color: _cWhite70),
-                  maxLines: 2, overflow: TextOverflow.ellipsis)))),
-              _Dv(),
-
-              // ── Dongle ────────────────────────────────────
-              SizedBox(width: 56, child: Center(
-                child: _HwDot(on: device.dongleFlashingIndicator,
-                  icon: Icons.usb_rounded))),
-              _Dv(),
-
-              // ── ECU ───────────────────────────────────────
-              SizedBox(width: 52, child: Center(
-                child: _HwDot(on: device.ecuFlashingIndicator,
-                  icon: Icons.memory_rounded))),
-              _Dv(),
-
-              // ── Progress + Flash btn ──────────────────────
-              Expanded(flex: 4, child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 6),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (device.isProgressVisible) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: device.progress,
-                          minHeight: 6,
-                          color: _cPass,
-                          backgroundColor: _cBorder)),
-                      const SizedBox(height: 3),
-                    ],
-                    Text(device.flashPercent,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 10, color: _cWhite40)),
-                    if (device.playButtonVisible) ...[
-                      const SizedBox(height: 4),
-                      GestureDetector(
-                        onTap: device.playButtonDisable ? null
-                            : () => controller.startIndividualFlash(device),
-                        child: Container(
-                          height: 26,
-                          decoration: BoxDecoration(
-                            gradient: device.playButtonDisable
-                                ? null
-                                : const LinearGradient(
-                                    colors: [_cOrange, _cOrangD]),
-                            color: device.playButtonDisable ? _cBorder : null,
-                            borderRadius: BorderRadius.circular(5),
-                            boxShadow: device.playButtonDisable ? null
-                                : const [BoxShadow(
-                                    color: Color(0x40F97316),
-                                    blurRadius: 5)]),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.play_arrow_rounded,
-                                color: _cWhite, size: 13),
-                              SizedBox(width: 3),
-                              Text('Flash', style: TextStyle(
-                                fontSize: 10, color: _cWhite,
-                                fontWeight: FontWeight.w700)),
-                            ]),
-                        )),
-                    ],
-                  ]))),
-              _Dv(),
-
-              // ── Time ──────────────────────────────────────
-              SizedBox(width: 56, child: Center(
-                child: Text(device.flashTimer,
+            // ── # ──────────────────────────────────────────
+            SizedBox(width: 46, child: Center(
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [_cOrange, _cOrangD]),
+                  shape: BoxShape.circle,
+                  boxShadow: const [BoxShadow(
+                    color: Color(0x40F97316), blurRadius: 5)]),
+                child: Center(child: Text('${device.srNo}',
                   style: const TextStyle(
-                    fontSize: 11, color: _cWhite70,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w600)))),
-              _Dv(),
+                    fontSize: 11, fontWeight: FontWeight.bold,
+                    color: _cWhite)))))),
+            _Dv(),
 
-              // ── Status badge ──────────────────────────────
-              SizedBox(width: 78, child: Center(
-                child: _StatusBadge(color: device.statusColor))),
-              _Dv(),
+            // ── Before/After ─────────────────────────────
+            SizedBox(width: 54, child: Column(children: [
+              Expanded(child: Center(child: _Pill('Before', _cWhite40, _cWhite15))),
+              Container(height: 0.6, color: _cBorder),
+              Expanded(child: Center(child: _Pill('After', _cOrange,
+                const Color(0x20F97316)))),
+            ])),
+            _Dv(),
 
-              // ── Report badge ──────────────────────────────
-              SizedBox(width: 78, child: Center(
-                child: _StatusBadge(color: device.reportColor))),
-              _Dv(),
+            // ── Cal Id ───────────────────────────────────
+            Expanded(flex: 5, child: _BACell(
+              before: device.calIdBefore, after: device.printCalId)),
+            _Dv(),
 
-              // ── Print button ──────────────────────────────
-              SizedBox(width: 86, child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 7),
-                child: GestureDetector(
-                  onTap: device.printButtonDisable ? null
-                      : () => controller.printSticker(device),
-                  child: Container(
-                    height: 30,
-                    decoration: BoxDecoration(
-                      gradient: device.printButtonDisable
-                          ? null
-                          : const LinearGradient(
-                              colors: [_cOrange, _cOrangD]),
-                      color: device.printButtonDisable ? _cBorder : null,
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: device.printButtonDisable ? null
-                          : const [BoxShadow(
-                              color: Color(0x40F97316),
-                              blurRadius: 6, offset: Offset(0, 2))]),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.print_rounded, color: _cWhite, size: 12),
-                        SizedBox(width: 4),
-                        Text('Print', style: TextStyle(
-                          fontSize: 11, color: _cWhite,
-                          fontWeight: FontWeight.w700)),
-                      ]))))),
-            ],
-          ),
+            // ── ECU Sr No ────────────────────────────────
+            Expanded(flex: 4, child: _BACell(
+              before: device.ecuSrNo, after: device.ecuSrNoAfter)),
+            _Dv(),
+
+            // ── SW Version ───────────────────────────────
+            Expanded(flex: 3, child: _BACell(
+              before: device.swVersionBefore, after: device.swVersionAfter)),
+            _Dv(),
+
+            // ── CVN ──────────────────────────────────────
+            Expanded(flex: 3, child: _BACell(
+              before: device.cvnBefore, after: device.cvn)),
+            _Dv(),
+
+            // ── Part No ──────────────────────────────────
+            Expanded(flex: 4, child: Center(child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(device.swPartNo.isNotEmpty ? device.swPartNo : '—',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 9.5, color: _cWhite70),
+                maxLines: 2, overflow: TextOverflow.ellipsis)))),
+            _Dv(),
+
+            // ── Dongle ───────────────────────────────────
+            SizedBox(width: 56, child: Center(
+              child: _HwDot(on: device.dongleFlashingIndicator,
+                icon: Icons.usb_rounded))),
+            _Dv(),
+
+            // ── ECU ──────────────────────────────────────
+            SizedBox(width: 52, child: Center(
+              child: _HwDot(on: device.ecuFlashingIndicator,
+                icon: Icons.memory_rounded))),
+            _Dv(),
+
+            // ── Progress ─────────────────────────────────
+            Expanded(flex: 4, child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6, vertical: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Progress bar — always show during and after flash
+                  if (device.isProgressVisible || device.flashingCompleted) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: device.progress,
+                        minHeight: 6,
+                        color: device.flashingSuccess ? _cPass : _cOrange,
+                        backgroundColor: _cBorder)),
+                    const SizedBox(height: 3),
+                  ],
+                  Text(device.flashPercent,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 10, color: _cWhite40)),
+                  if (device.playButtonVisible) ...[
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: device.playButtonDisable ? null
+                          : () => controller.startIndividualFlash(device),
+                      child: Container(
+                        height: 26,
+                        decoration: BoxDecoration(
+                          gradient: device.playButtonDisable
+                              ? null
+                              : const LinearGradient(
+                                  colors: [_cOrange, _cOrangD]),
+                          color: device.playButtonDisable ? _cBorder : null,
+                          borderRadius: BorderRadius.circular(5),
+                          boxShadow: device.playButtonDisable ? null
+                              : const [BoxShadow(
+                                  color: Color(0x40F97316),
+                                  blurRadius: 5)]),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                              color: _cWhite, size: 13),
+                            SizedBox(width: 3),
+                            Text('Flash', style: TextStyle(
+                              fontSize: 10, color: _cWhite,
+                              fontWeight: FontWeight.w700)),
+                          ]),
+                      )),
+                  ],
+                ]))),
+            _Dv(),
+
+            // ── Time ─────────────────────────────────────
+            SizedBox(width: 56, child: Center(
+              child: Text(device.flashTimer,
+                style: const TextStyle(
+                  fontSize: 11, color: _cWhite70,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w600)))),
+            _Dv(),
+
+            // ── Status badge ─────────────────────────────
+            SizedBox(width: 78, child: Center(
+              child: _StatusBadge(
+                color: device.statusColor,
+                isFlashing: device.isflashing,
+                flashingCompleted: device.flashingCompleted,
+                flashingSuccess: device.flashingSuccess))),
+            _Dv(),
+
+            // ── Report badge ─────────────────────────────
+            SizedBox(width: 78, child: Center(
+              child: _ReportBadge(color: device.reportColor))),
+            _Dv(),
+
+            // ── Print button ─────────────────────────────
+            SizedBox(width: 86, child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6, vertical: 7),
+              child: GestureDetector(
+                onTap: device.printButtonDisable ? null
+                    : () => controller.printSticker(device),
+                child: Container(
+                  height: 30,
+                  decoration: BoxDecoration(
+                    gradient: device.printButtonDisable
+                        ? null
+                        : const LinearGradient(
+                            colors: [_cOrange, _cOrangD]),
+                    color: device.printButtonDisable ? _cBorder : null,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: device.printButtonDisable ? null
+                        : const [BoxShadow(
+                            color: Color(0x40F97316),
+                            blurRadius: 6, offset: Offset(0, 2))]),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.print_rounded, color: _cWhite, size: 12),
+                      SizedBox(width: 4),
+                      Text('Print', style: TextStyle(
+                        fontSize: 11, color: _cWhite,
+                        fontWeight: FontWeight.w700)),
+                    ]))))),
+          ],
         ),
-      );
-    });
+      ),
+    );
   }
 }
 
 // ════════════════════════════════════════════════════════════
-//  Shared small widgets
+//  Small Widgets
 // ════════════════════════════════════════════════════════════
 class _Pill extends StatelessWidget {
   final String label;
@@ -525,22 +526,78 @@ class _HwDot extends StatelessWidget {
   }
 }
 
+// ── Status Badge: shows Idle / Running / Pass / Fail ─────────
 class _StatusBadge extends StatelessWidget {
   final Color color;
-  const _StatusBadge({required this.color});
+  final bool isFlashing;
+  final bool flashingCompleted;
+  final bool flashingSuccess;
+  const _StatusBadge({
+    required this.color,
+    required this.isFlashing,
+    required this.flashingCompleted,
+    required this.flashingSuccess,
+  });
+
   @override
   Widget build(BuildContext context) {
-    final isPass    = color == _cPass    || color == Colors.green;
-    final isFail    = color == _cFail    || color == Colors.red;
-    final isRunning = color == Colors.yellow || color == _cYellow;
+    // Determine state from flags (more reliable than color)
     final Color bc;
     final IconData ico;
     final String lbl;
-    if (isPass)         { bc = _cPass;    ico = Icons.check_circle_rounded; lbl = 'Pass'; }
-    else if (isFail)    { bc = _cFail;    ico = Icons.cancel_rounded;       lbl = 'Fail'; }
-    else if (isRunning) { bc = _cYellow;  ico = Icons.sync_rounded;          lbl = 'Run'; }
-    else                { bc = _cWhite40; ico = Icons.remove_rounded;        lbl = 'Idle'; }
-    final idle = !isPass && !isFail && !isRunning;
+
+    if (flashingCompleted && flashingSuccess) {
+      bc = _cPass;   ico = Icons.check_circle_rounded; lbl = 'Pass';
+    } else if (flashingCompleted && !flashingSuccess) {
+      bc = _cFail;   ico = Icons.cancel_rounded;       lbl = 'Fail';
+    } else if (isFlashing) {
+      bc = _cYellow; ico = Icons.sync_rounded;          lbl = 'Run';
+    } else {
+      // Fall back to color
+      final isPass    = color == _cPass    || color.value == 0xFF4CAF50;
+      final isFail    = color == _cFail    || color.value == 0xFFF44336;
+      final isRunning = color == _cYellow  || color.value == 0xFFFFEB3B
+                     || color.value == 0xFFF59E0B;
+      if (isPass)         { bc = _cPass;    ico = Icons.check_circle_rounded; lbl = 'Pass'; }
+      else if (isFail)    { bc = _cFail;    ico = Icons.cancel_rounded;       lbl = 'Fail'; }
+      else if (isRunning) { bc = _cYellow;  ico = Icons.sync_rounded;          lbl = 'Run'; }
+      else                { bc = _cWhite40; ico = Icons.remove_rounded;        lbl = 'Idle'; }
+    }
+
+    final idle = lbl == 'Idle';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: idle ? _cWhite15 : bc.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: idle ? _cBorder : bc, width: 1.2),
+        boxShadow: idle ? null : [BoxShadow(
+          color: bc.withOpacity(0.18), blurRadius: 5)]),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(ico, size: 10, color: bc),
+        const SizedBox(width: 3),
+        Text(lbl, style: TextStyle(
+          fontSize: 9, fontWeight: FontWeight.w700, color: bc)),
+      ]));
+  }
+}
+
+// ── Report Badge ─────────────────────────────────────────────
+class _ReportBadge extends StatelessWidget {
+  final Color color;
+  const _ReportBadge({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPass = color.value == 0xFF4CAF50 || color == _cPass;
+    final isFail = color.value == 0xFFF44336 || color == _cFail;
+    final Color bc;
+    final IconData ico;
+    final String lbl;
+    if (isPass)      { bc = _cPass;    ico = Icons.check_circle_rounded; lbl = 'OK'; }
+    else if (isFail) { bc = _cFail;    ico = Icons.cancel_rounded;       lbl = 'Err'; }
+    else             { bc = _cWhite40; ico = Icons.remove_rounded;        lbl = 'Idle'; }
+    final idle = !isPass && !isFail;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
@@ -617,7 +674,7 @@ class _BottomBar extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════
-//  Find Dongle Button — scans WiFi and shows found IPs
+//  Find Dongle Button
 // ════════════════════════════════════════════════════════════
 class _FindDongleBtn extends StatelessWidget {
   final HomePageController controller;
@@ -679,15 +736,12 @@ class _DongleScanDialogState extends State<_DongleScanDialog> {
 
   Future<void> _startScan() async {
     setState(() {
-      _scanning = true;
-      _done     = false;
-      _foundIPs = [];
-      _progress = 0.0;
-      _status   = 'Getting WiFi info...';
+      _scanning = true; _done = false;
+      _foundIPs = []; _progress = 0.0;
+      _status = 'Getting WiFi info...';
     });
 
     try {
-      // Get local IP to find subnet
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4);
 
@@ -695,9 +749,7 @@ class _DongleScanDialogState extends State<_DongleScanDialog> {
       for (final iface in interfaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address;
-          // Skip loopback
           if (ip.startsWith('127.')) continue;
-          // Take first LAN IP
           final parts = ip.split('.');
           if (parts.length == 4) {
             subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
@@ -709,92 +761,63 @@ class _DongleScanDialogState extends State<_DongleScanDialog> {
 
       if (subnet == null) {
         setState(() {
-          _status   = 'Could not detect WiFi IP.\nMake sure WiFi is connected.';
-          _scanning = false;
-          _done     = true;
+          _status = 'Could not detect WiFi IP.\nMake sure WiFi is connected.';
+          _scanning = false; _done = true;
         });
         return;
       }
 
       setState(() => _status = 'Scanning $subnet.1–254 on port 6888...');
 
-      final found  = <String>[];
-      const total  = 254;
-      const batch  = 20; // scan 20 IPs at a time
+      final found = <String>[];
+      const total = 254;
+      const batch = 20;
 
       for (int start = 1; start <= total; start += batch) {
         if (!mounted) return;
-
         final end     = (start + batch - 1).clamp(1, total);
         final futures = <Future<String?>>[];
-
-        for (int i = start; i <= end; i++) {
-          futures.add(_tryConnect('$subnet.$i'));
-        }
-
+        for (int i = start; i <= end; i++) futures.add(_tryConnect('$subnet.$i'));
         final results = await Future.wait(futures);
         for (final ip in results) {
-          if (ip != null) {
-            found.add(ip);
-            if (mounted) setState(() => _foundIPs = List.from(found));
-          }
+          if (ip != null) { found.add(ip); if (mounted) setState(() => _foundIPs = List.from(found)); }
         }
-
         if (mounted) {
           setState(() {
             _progress = end / total;
-            _status   = 'Scanning... ${(end / total * 100).toInt()}%'
-                '  —  Found: ${found.length}';
+            _status = 'Scanning... ${(end / total * 100).toInt()}%  —  Found: ${found.length}';
           });
         }
       }
 
       setState(() {
-        _scanning = false;
-        _done     = true;
-        _foundIPs = found;
-        _status   = found.isEmpty
+        _scanning = false; _done = true; _foundIPs = found;
+        _status = found.isEmpty
             ? 'No dongles found on $subnet.x port 6888'
             : '✅ Found ${found.length} dongle(s)';
       });
-
     } catch (e) {
-      setState(() {
-        _scanning = false;
-        _done     = true;
-        _status   = 'Scan error: $e';
-      });
+      setState(() { _scanning = false; _done = true; _status = 'Scan error: $e'; });
     }
   }
 
-  // Try TCP connect on port 6888 with 400ms timeout
   Future<String?> _tryConnect(String ip) async {
     try {
       final socket = await Socket.connect(ip, 6888,
         timeout: const Duration(milliseconds: 400));
       socket.destroy();
       return ip;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
 
-  // User selects an IP → update dongle row IP
   void _selectIP(String ip) {
-    // Update all unconnected dongles with found IP
-    // Or show which dongle to assign
     Navigator.of(context).pop();
-    Get.snackbar(
-      '✅ Dongle Found',
+    Get.snackbar('✅ Dongle Found',
       'IP: $ip — Update this IP in server for dongle registration.',
-      backgroundColor: _cPass,
-      colorText: _cWhite,
+      backgroundColor: _cPass, colorText: _cWhite,
       duration: const Duration(seconds: 5),
-      snackPosition: SnackPosition.BOTTOM,
-    );
-
-    // Print to console for developer
-    print('🔍 Dongle found at: $ip — Update dongle IP in server');
+      snackPosition: SnackPosition.BOTTOM);
+    print('🔍 Dongle found at: $ip');
   }
 
   @override
@@ -806,208 +829,147 @@ class _DongleScanDialogState extends State<_DongleScanDialog> {
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [_cSurface, _cSurface2],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight),
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: _cBorder),
-          boxShadow: const [BoxShadow(
-            color: Colors.black54, blurRadius: 24)]),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [_cOrange, _cOrangD, _cOrangDD]),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16))),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18, vertical: 14),
-              child: Row(children: [
-                const Icon(Icons.wifi_find_rounded,
-                  color: _cWhite, size: 20),
-                const SizedBox(width: 10),
-                const Expanded(child: Text('Scanning for Dongles',
-                  style: TextStyle(
-                    color: _cWhite, fontSize: 15,
-                    fontWeight: FontWeight.bold))),
-                if (!_scanning)
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const Icon(Icons.close_rounded,
-                      color: _cWhite, size: 20)),
-              ])),
+          boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 24)]),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_cOrange, _cOrangD, _cOrangDD]),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16), topRight: Radius.circular(16))),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Row(children: [
+              const Icon(Icons.wifi_find_rounded, color: _cWhite, size: 20),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('Scanning for Dongles',
+                style: TextStyle(color: _cWhite, fontSize: 15, fontWeight: FontWeight.bold))),
+              if (!_scanning)
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: const Icon(Icons.close_rounded, color: _cWhite, size: 20)),
+            ])),
 
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status text
-                  Row(children: [
-                    if (_scanning)
-                      const SizedBox(
-                        width: 12, height: 12,
-                        child: CircularProgressIndicator(
-                          color: _cOrange, strokeWidth: 2))
-                    else
-                      Icon(
-                        _foundIPs.isEmpty ? Icons.error_outline_rounded
-                            : Icons.check_circle_rounded,
-                        color: _foundIPs.isEmpty ? _cFail : _cPass,
-                        size: 14),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_status,
-                      style: const TextStyle(
-                        color: _cWhite70, fontSize: 11))),
-                  ]),
-                  const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                if (_scanning)
+                  const SizedBox(width: 12, height: 12,
+                    child: CircularProgressIndicator(color: _cOrange, strokeWidth: 2))
+                else
+                  Icon(_foundIPs.isEmpty ? Icons.error_outline_rounded
+                      : Icons.check_circle_rounded,
+                    color: _foundIPs.isEmpty ? _cFail : _cPass, size: 14),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_status,
+                  style: const TextStyle(color: _cWhite70, fontSize: 11))),
+              ]),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: _scanning ? _progress : 1.0,
+                  minHeight: 7, color: _cOrange, backgroundColor: _cBorder)),
+              const SizedBox(height: 4),
+              Text('${(_progress * 100).toInt()}%',
+                style: const TextStyle(color: _cWhite40, fontSize: 10)),
+              const SizedBox(height: 14),
 
-                  // Progress bar
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: _scanning ? _progress : 1.0,
-                      minHeight: 7,
-                      color: _cOrange,
-                      backgroundColor: _cBorder)),
-                  const SizedBox(height: 4),
-                  Text('${(_progress * 100).toInt()}%',
-                    style: const TextStyle(
-                      color: _cWhite40, fontSize: 10)),
-
-                  const SizedBox(height: 14),
-
-                  // Results
-                  if (_done) ...[
-                    if (_foundIPs.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0x15EF4444),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _cFail.withOpacity(0.3))),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text('No dongles found on port 6888.',
-                              style: TextStyle(
-                                color: _cFail, fontSize: 12,
-                                fontWeight: FontWeight.bold)),
-                            SizedBox(height: 8),
-                            Text('Check:',
-                              style: TextStyle(
-                                color: _cWhite70, fontSize: 11,
-                                fontWeight: FontWeight.w600)),
-                            SizedBox(height: 4),
-                            Text('• Dongle is powered ON (LED blinking)',
-                              style: TextStyle(color: _cWhite40, fontSize: 11)),
-                            Text('• Dongle connected to same WiFi as laptop',
-                              style: TextStyle(color: _cWhite40, fontSize: 11)),
-                            Text('• Dongle port is 6888',
-                              style: TextStyle(color: _cWhite40, fontSize: 11)),
-                            Text('• Windows Firewall allows port 6888',
-                              style: TextStyle(color: _cWhite40, fontSize: 11)),
-                          ]))
-                    else ...[
-                      Text('${_foundIPs.length} Dongle(s) Found — Tap to copy IP:',
-                        style: const TextStyle(
-                          color: _cPass, fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      ..._foundIPs.map((ip) => GestureDetector(
-                        onTap: () => _selectIP(ip),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
+              if (_done) ...[
+                if (_foundIPs.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0x15EF4444),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _cFail.withOpacity(0.3))),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+                      Text('No dongles found on port 6888.',
+                        style: TextStyle(color: _cFail, fontSize: 12, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 8),
+                      Text('• Dongle is powered ON (LED blinking)',
+                        style: TextStyle(color: _cWhite40, fontSize: 11)),
+                      Text('• Dongle connected to same WiFi as laptop',
+                        style: TextStyle(color: _cWhite40, fontSize: 11)),
+                      Text('• Dongle port is 6888',
+                        style: TextStyle(color: _cWhite40, fontSize: 11)),
+                    ]))
+                else ...[
+                  Text('${_foundIPs.length} Dongle(s) Found — Tap to copy IP:',
+                    style: const TextStyle(color: _cPass, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  ..._foundIPs.map((ip) => GestureDetector(
+                    onTap: () => _selectIP(ip),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0x15F97316),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _cOrange)),
+                      child: Row(children: [
+                        Container(width: 32, height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0x15F97316),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: _cOrange)),
-                          child: Row(children: [
-                            Container(
-                              width: 32, height: 32,
-                              decoration: BoxDecoration(
-                                color: const Color(0x20F97316),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: _cOrange, width: 1.5)),
-                              child: const Icon(Icons.usb_rounded,
-                                color: _cOrange, size: 16)),
-                            const SizedBox(width: 12),
-                            Expanded(child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(ip,
-                                  style: const TextStyle(
-                                    color: _cWhite,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'monospace')),
-                                const Text('Port 6888 — Dongle responding ✅',
-                                  style: TextStyle(
-                                    color: _cWhite40, fontSize: 10)),
-                              ])),
-                            const Icon(Icons.copy_rounded,
-                              color: _cOrange, size: 16),
-                          ]),
-                        ),
-                      )).toList(),
-                    ],
-                    const SizedBox(height: 14),
-                  ],
-
-                  // Buttons
-                  Row(children: [
-                    if (_done) ...[
-                      Expanded(child: GestureDetector(
-                        onTap: _startScan,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: _cOrange),
-                            borderRadius: BorderRadius.circular(8)),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.refresh_rounded,
-                                color: _cOrange, size: 15),
-                              SizedBox(width: 6),
-                              Text('Rescan',
-                                style: TextStyle(
-                                  color: _cOrange, fontSize: 12,
-                                  fontWeight: FontWeight.w700)),
-                            ])),
-                      )),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(child: GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 11),
-                        decoration: BoxDecoration(
-                          color: _cBorder,
-                          borderRadius: BorderRadius.circular(8)),
-                        child: const Center(child: Text('Close',
-                          style: TextStyle(
-                            color: _cWhite70, fontSize: 12,
-                            fontWeight: FontWeight.w600)))),
-                    )),
-                  ]),
+                            color: const Color(0x20F97316),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: _cOrange, width: 1.5)),
+                          child: const Icon(Icons.usb_rounded, color: _cOrange, size: 16)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(ip, style: const TextStyle(
+                            color: _cWhite, fontSize: 16,
+                            fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                          const Text('Port 6888 — Dongle responding ✅',
+                            style: TextStyle(color: _cWhite40, fontSize: 10)),
+                        ])),
+                        const Icon(Icons.copy_rounded, color: _cOrange, size: 16),
+                      ]),
+                    ),
+                  )).toList(),
                 ],
-              ),
-            ),
-          ],
-        ),
+                const SizedBox(height: 14),
+              ],
+
+              Row(children: [
+                if (_done) ...[
+                  Expanded(child: GestureDetector(
+                    onTap: _startScan,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _cOrange),
+                        borderRadius: BorderRadius.circular(8)),
+                      child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.refresh_rounded, color: _cOrange, size: 15),
+                        SizedBox(width: 6),
+                        Text('Rescan', style: TextStyle(
+                          color: _cOrange, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ])))),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    decoration: BoxDecoration(
+                      color: _cBorder, borderRadius: BorderRadius.circular(8)),
+                    child: const Center(child: Text('Close',
+                      style: TextStyle(color: _cWhite70, fontSize: 12,
+                        fontWeight: FontWeight.w600)))))),
+              ]),
+            ]),
+          ),
+        ]),
       ),
     );
   }
 }
 
+// ════════════════════════════════════════════════════════════
+//  Orange Button
+// ════════════════════════════════════════════════════════════
 class _OrangeBtn extends StatelessWidget {
   final String label;
   final bool enabled;
