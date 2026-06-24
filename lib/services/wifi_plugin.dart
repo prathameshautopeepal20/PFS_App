@@ -1,5 +1,7 @@
 // lib/services/wifi_plugin.dart
-// Mirrors .NET WifiFunctions.cs / IConnectionWifi exactly
+// Mirrors .NET WifiFunctions.cs exactly
+// Key: persistent TcpClient per index (like .NET client_1, client_2...)
+// Fix: auto-reconnect if dongle disconnects during flash
 
 import 'dart:typed_data';
 import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
@@ -13,6 +15,7 @@ import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
 
+// ── Per-dongle slot (mirrors .NET client_1 ... client_8) ─────
 class _Slot {
   CommController ctrl   = CommController();
   DongleComm?    dongle;
@@ -28,27 +31,39 @@ class WiFiPlugin {
   WiFiPlugin._();
   static final WiFiPlugin instance = WiFiPlugin._();
 
-  final Map<int, _Slot>     _slots         = {};
+  final Map<int, _Slot>     _slots          = {};
   final Map<String, double> flashPercentMap = {};
 
+  // Seed key lock: only ONE ECU can do 2701/2702 at a time on shared CAN bus
+  // After seed key, bulk data is safe to run in parallel (different sequence counters)
+
+
+  // ─────────────────────────────────────────────────────────
+  //  initSockets — mirrors .NET InitSocketes()
+  //  Creates 8 empty slots (client_1 … client_8)
+  // ─────────────────────────────────────────────────────────
   Future<void> initSockets() async {
     for (int i = 1; i <= 8; i++) _slots[i] = _Slot();
-    print('✅ [WiFiPlugin] Sockets initialized');
+    print('✅ [WiFiPlugin] Sockets initialized (8 slots)');
   }
 
+  // ─────────────────────────────────────────────────────────
+  //  closeSockets — mirrors .NET CloseSockets()
+  // ─────────────────────────────────────────────────────────
   Future<void> closeSockets() async {
     for (final s in _slots.values) {
       try { await s.ctrl.disconnect(); } catch (_) {}
       s.ready = false;
     }
-    print('✅ [WiFiPlugin] Closed');
+    print('✅ [WiFiPlugin] All sockets closed');
   }
 
-  /// Used by progress timer to read flash percent from UDSDiagnostic
   UDSDiagnostic? getDiag(int index) => _slots[index]?.diag;
 
   // ─────────────────────────────────────────────────────────
-  //  checkDongle — TCP connect + DongleComm/UDSDiagnostic setup
+  //  checkDongle — mirrors .NET CheckClient_N()
+  //  Closes existing connection, reconnects, creates DongleComm
+  //  TX=7E0 forced (server sends 7DF which ECU ignores)
   // ─────────────────────────────────────────────────────────
   Future<bool> checkDongle(String ip, int index, {
     String txHeader     = '7E0',
@@ -56,23 +71,35 @@ class WiFiPlugin {
     String protocolHex  = '02',
   }) async {
     try {
+      // Pad to even length (07E0, 07E8)
       final txH   = txHeader.length.isOdd     ? '0$txHeader'     : txHeader;
       final rxH   = rxHeaderMask.length.isOdd ? '0$rxHeaderMask' : rxHeaderMask;
       final proto = int.tryParse(protocolHex, radix: 16) ?? 0x02;
 
-      final slot = _slots[index]!;
+      final slot = _slots[index] ?? _Slot();
+      _slots[index] = slot;
+
+      // .NET: if connected → close → delay 50ms → new TcpClient
       if (slot.ctrl.isConnected.value) {
         await slot.ctrl.disconnect();
-        await Future.delayed(const Duration(milliseconds: 100));
+        await _ms(50);
       }
 
-      await slot.ctrl.connectWifi(host: ip, port: 6888, selectedType: Connectivity.wiFi);
-      if (!slot.ctrl.isConnected.value) return false;
+      // .NET: client_N.ConnectAsync(IP, 6888).Wait(500)
+      await slot.ctrl.connectWifi(
+          host: ip, port: 6888, selectedType: Connectivity.wiFi);
+
+      if (!slot.ctrl.isConnected.value) {
+        print('❌ checkDongle[$index] @ $ip: connection failed');
+        return false;
+      }
 
       final protocol = Protocol.values.firstWhere(
           (p) => p.value == proto,
           orElse: () => Protocol.ISO15765_500KB_11BIT_CAN);
-      final dongle = DongleComm(comm: slot.ctrl, isChannel: true, channelId: '00');
+
+      final dongle = DongleComm(
+          comm: slot.ctrl, isChannel: true, channelId: '00');
       dongle.protocol = protocol;
 
       slot.dongle   = dongle;
@@ -92,156 +119,207 @@ class WiFiPlugin {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  _readPid — SA→StopTP→Proto→TxH→RxH→Pad→ReadParameters
-  //  Mirrors .NET GetESN / GetCalId / GetSW / GetHW / GetCVN
+  //  _reconnect — reconnect dongle if dropped during flash
+  //  .NET does this implicitly via persistent TcpClient
+  // ─────────────────────────────────────────────────────────
+  Future<bool> _reconnect(int index) async {
+    final slot = _slots[index];
+    if (slot == null) return false;
+    print('🔄 Reconnecting slot $index @ ${slot.ip}...');
+    try {
+      if (slot.ctrl.isConnected.value) {
+        await slot.ctrl.disconnect();
+        await _ms(200);
+      }
+      await slot.ctrl.connectWifi(
+          host: slot.ip, port: 6888, selectedType: Connectivity.wiFi);
+      if (!slot.ctrl.isConnected.value) {
+        print('❌ Reconnect failed for slot $index');
+        return false;
+      }
+      final protocol = Protocol.values.firstWhere(
+          (p) => p.value == slot.proto,
+          orElse: () => Protocol.ISO15765_500KB_11BIT_CAN);
+      final dongle = DongleComm(
+          comm: slot.ctrl, isChannel: true, channelId: '00');
+      dongle.protocol = protocol;
+      slot.dongle  = dongle;
+      slot.diag    = UDSDiagnostic(dongle, ECUCalculateSeedkey());
+      slot.ready   = true;
+      print('✅ Reconnected slot $index @ ${slot.ip}');
+      return true;
+    } catch (e) {
+      print('❌ Reconnect exception slot $index: $e');
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  _setupCAN — StopTP → Proto → TxH → RxH → Padding
+  // ─────────────────────────────────────────────────────────
+  Future<void> _setupCAN(_Slot slot) async {
+    final d = slot.dongle!;
+    await d.canStopTP();                    await _ms(100);
+    await d.dongleSetProtocol(slot.proto);  await _ms(100);
+    await d.canSetTxHeader(slot.txHeader);  await _ms(100);
+    await d.canSetRxHeaderMask(slot.rxHeader); await _ms(100);
+    await d.canStartPadding('00');          await _ms(100);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  _diagSession — 10 01 (DefaultSession) to recover ECU
+  // ─────────────────────────────────────────────────────────
+  Future<bool> _diagSession(DongleComm dongle, int attempt) async {
+    try {
+      final resp   = await dongle.can2xTxRx(2, '1001');
+      final status = resp?.ecuResponseStatus ?? 'null';
+      final data   = resp?.actualDataBytes
+              ?.map((e) => e.toRadixString(16).padLeft(2, '0').toUpperCase())
+              .join(' ') ?? '';
+      print('🔄 DiagSession[$attempt](10 01): $status data=$data');
+      return status == 'NOERROR';
+    } catch (e) {
+      print('   ⚠️ DiagSession[$attempt] ex: $e');
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  _readPid — mirrors .NET GetESN/GetHW/GetSW/GetCalId/GetCVN
+  //  2-attempt retry: attempt 1 may fail if ECU in programming
+  //  session from previous flash → attempt 2 recovers
   // ─────────────────────────────────────────────────────────
   Future<List<String>> _readPid(int index, List<dynamic> rawPids,
       {String pidType = 'ESN'}) async {
     try {
       final slot = _slots[index];
-      if (slot == null || !slot.ready) {
+      if (slot == null || !slot.ready || slot.dongle == null) {
         print('❌ _readPid[$index]: slot not ready');
         return ['false', ''];
       }
 
-      // Build target PID — hardcoded PIDs matching .NET exactly
-      // From .NET debug log:
-      // CHECK ESN  → PID 22F18C → "210535372---"  (serial_no for API)
-      // CHECK HPN  → PID 22F18B → "A3C073719---"  (hw_part_no)
-      // CHECK SW   → PID 22F188 → "CP352000"       (sw_version)
-      // CHECK CALID→ PID 0904   → "RE23520P04EU5002"
-      // CHECK CVN  → PID 0906   → "8DE09AA0"       (cvn for API)
-      final _hardcoded = <String, String>{
-        'ESN':   '22F18C',  // .NET ESN = PID 22F18C
+      // Hardcoded PIDs from .NET debug log
+      const hardcoded = <String, String>{
+        'ESN':   '22F18C',
+        'HW':    '22F18B',
+        'SW':    '22F188',
         'CALID': '0904',
-        'SW':    '22F188',  // .NET SW = PID 22F188
-        'HW':    '22F18B',  // .NET HPN = PID 22F18B
-        'CVN':   '0906',    // .NET CVN = PID 0906
+        'CVN':   '0906',
       };
 
-      // Try to find matching PID in rawPids from API first
-      ReadParameterPID? targetPidObj;
+      // Find matching PID from API list, else use hardcoded
+      ReadParameterPID? targetPid;
       for (final item in rawPids) {
         if (item is! Map) continue;
         final m    = Map<String, dynamic>.from(item);
-        final code = (m['pid'] ?? m['did'] ?? m['code'] ?? '').toString().toUpperCase();
-        if (pidType == 'ESN'   && code.startsWith('22F18C')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'CALID' && code == '0904')            { m['pid'] = '0904'; targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'SW'    && code.startsWith('22F188')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'HW'    && code.startsWith('22F18B')) { m['pid'] = code; targetPidObj = ReadParameterPID.fromJson(m); break; }
-        if (pidType == 'CVN'   && code == '0906')            { m['pid'] = '0906'; targetPidObj = ReadParameterPID.fromJson(m); break; }
+        final code = (m['pid'] ?? m['did'] ?? m['code'] ?? '')
+            .toString().toUpperCase();
+        if (pidType == 'ESN'   && code.contains('22F18C')) { targetPid = ReadParameterPID.fromJson({...m, 'pid': code}); break; }
+        if (pidType == 'HW'    && code.contains('22F18B')) { targetPid = ReadParameterPID.fromJson({...m, 'pid': code}); break; }
+        if (pidType == 'SW'    && code.contains('22F188')) { targetPid = ReadParameterPID.fromJson({...m, 'pid': code}); break; }
+        if (pidType == 'CALID' && code == '0904')          { targetPid = ReadParameterPID.fromJson({...m, 'pid': '0904'}); break; }
+        if (pidType == 'CVN'   && code == '0906')          { targetPid = ReadParameterPID.fromJson({...m, 'pid': '0906'}); break; }
       }
-
-      // Fallback: build from hardcoded — NEVER use pidList.first
-      if (targetPidObj == null) {
-        final hardPid = _hardcoded[pidType];
-        if (hardPid == null) { print('❌ Unknown pidType: $pidType'); return ['false', '']; }
-        targetPidObj = ReadParameterPID.fromJson({
-          'pid': hardPid, 'pid_type': pidType, 'name': pidType, 'length': 0,
+      if (targetPid == null) {
+        final hp = hardcoded[pidType];
+        if (hp == null) { print('❌ Unknown pidType: $pidType'); return ['false', '']; }
+        targetPid = ReadParameterPID.fromJson({
+          'pid': hp, 'pid_type': pidType, 'name': pidType, 'length': 0,
         });
-        print('⚠️  Hardcoded PID $hardPid for $pidType');
       }
 
-      print('\n🔍 _readPid[$index] type=$pidType PID=${targetPidObj.pid} TX=${slot.txHeader}');
-      final dongle = slot.dongle!;
+      print('\n🔍 _readPid[$index] type=$pidType PID=${targetPid.pid} TX=${slot.txHeader}');
 
-      // .NET: SecurityAccess → StopTP → SetProtocol → SetTxHeader → SetRxHeader → StartPadding
+      // SecurityAccess once before attempts
       print('🔐 SA...');
-      final saR = await dongle.securityAccess();
-      print('   SA: ${_hexR(saR)}');
+      final saR = await slot.dongle!.securityAccess();
+      print('   SA: ${_hex(saR)}');
       await _ms(200);
 
-      print('🛑 StopTP...');
-      await dongle.canStopTP();
-      await _ms(200);
-
-      print('⚙️  Proto...');
-      await dongle.dongleSetProtocol(slot.proto);
-      await _ms(200);
-
-      print('📤 TxH(${slot.txHeader})...');
-      await dongle.canSetTxHeader(slot.txHeader);
-      await _ms(200);
-
-      print('📥 RxH(${slot.rxHeader})...');
-      await dongle.canSetRxHeaderMask(slot.rxHeader);
-      await _ms(200);
-
-      print('🟢 Pad...');
-      await dongle.canStartPadding('00');
-      await _ms(200);
-
-      // Send DiagnosticSessionControl(DefaultSession=01) after CAN headers are set
-      // Recovers ECU from stuck programming session after failed flash
-      // 10 01 = 2 bytes only (NRC 0x13 = wrong length if 3 bytes sent)
-      try {
-        final dsResp = await dongle.can2xTxRx(2, '1001');
-        final dsStatus = dsResp?.ecuResponseStatus ?? 'null';
-        final dsData   = dsResp?.actualDataBytes?.map((e) => e.toRadixString(16).padLeft(2,'0').toUpperCase()).join(' ') ?? '';
-        print('🔄 DiagSession(10 01): status=$dsStatus data=$dsData');
-        if (dsStatus == 'NOERROR') {
-          print('   ✅ ECU returned to default session');
-        } else {
-          print('   ⚠️  DiagSession failed: $dsStatus — ECU may be in bad state');
-        }
+      // 2-attempt loop (handles ECU stuck in programming session)
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        await _setupCAN(slot);
+        final dsOk = await _diagSession(slot.dongle!, attempt);
         await _ms(300);
-      } catch (e) {
-        print('   ⚠️  DiagSession exception: $e');
-      }
 
-      print('📡 ReadParameters: type=$pidType pid=${targetPidObj.pid}');
-      final responses = await slot.diag!.readParameters(1, [targetPidObj]);
-
-      print('📋 responses count: ${responses?.length ?? 0}');
-      for (final resp in (responses ?? [])) {
-        // Skip ECU error responses (ECUERROR_SERVICENOTSUPPORTED etc.)
-        final status = resp.status ?? '';
-        if (status.isNotEmpty && status != 'NOERROR' && status.contains('ERROR')) {
-          print('   ⚠️  skip error response: $status');
+        if (!dsOk && attempt == 1) {
+          print('   ⚠️ DiagSession attempt 1 failed → retrying...');
+          await _ms(500);
           continue;
         }
 
-        // Try responseValue from variables
-        final vars = resp.variables ?? [];
-        if (vars.isNotEmpty) {
-          final rv = vars.first.responseValue ?? '';
-          if (rv.isNotEmpty) {
-            print('✅ _readPid[$index] responseValue: "$rv"');
-            return ['true', rv];
+        print('📡 ReadParameters attempt $attempt: pid=${targetPid.pid}');
+        final responses = await slot.diag!.readParameters(1, [targetPid]);
+        print('📋 responses: ${responses?.length ?? 0}');
+
+        for (final resp in (responses ?? [])) {
+          final status = resp.status ?? '';
+          if (status.isNotEmpty && status != 'NOERROR' && status.contains('ERROR')) {
+            print('   ⚠️ skip: $status');
+            continue;
           }
+
+          // Try responseValue
+          final vars = resp.variables ?? [];
+          if (vars.isNotEmpty) {
+            final rv = vars.first.responseValue ?? '';
+            if (rv.isNotEmpty) {
+              print('✅ _readPid[$index] $pidType responseValue: "$rv"');
+              return ['true', rv];
+            }
+          }
+
+          // Try dataArray
+          final da = resp.dataArray;
+          if (da != null && da.isNotEmpty) {
+            List<int> data = da.toList();
+            // Strip service response header: 62 F1 8x (UDS) or 49 xx xx (OBD2)
+            if (data.length > 3 && (data[0] == 0x49 || data[0] == 0x62)) {
+              data = data.sublist(3);
+            }
+            // Strip ALL padding bytes: 0xCC (CAN padding), 0x00 (null), 0xFF (erased flash)
+            final clean = data.where((b) => b != 0xCC && b != 0x00 && b != 0xFF).toList();
+            if (clean.isEmpty) {
+              print('   ⚠️ dataArray all padding — skip');
+              continue;
+            }
+            // Must be printable ASCII for ESN/HW/SW/CALID/CVN
+            final isAscii = clean.every((b) => b >= 0x20 && b < 0x7F);
+            if (!isAscii && pidType != 'CVN') {
+              // For non-CVN: if not ASCII, likely garbage — skip
+              print('   ⚠️ dataArray not ASCII for $pidType — skip');
+              continue;
+            }
+            final result = isAscii
+                ? String.fromCharCodes(clean)
+                : clean.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join();
+            // Sanity check: result must be at least 4 chars and not all same char
+            if (result.length < 4) {
+              print('   ⚠️ dataArray too short: "$result" — skip');
+              continue;
+            }
+            if (result.runes.toSet().length == 1) {
+              print('   ⚠️ dataArray all same char: "$result" — skip');
+              continue;
+            }
+            print('✅ _readPid[$index] $pidType dataArray: "$result"');
+            return ['true', result];
+          }
+          print('   resp: status=$status');
         }
 
-        // Try dataArray — raw ECU bytes
-        final da = resp.dataArray;
-        if (da != null && da.isNotEmpty) {
-          List<int> data = da.toList();
-          // Strip service response header: 49 06 xx or 62 F1 8x
-          if (data.length > 3 && (data[0] == 0x49 || data[0] == 0x62)) {
-            data = data.sublist(3);
-          }
-          // Strip padding bytes
-          final clean = data.where((b) => b != 0xCC && b != 0x00).toList();
-          if (clean.isEmpty) continue;
-          final isAscii = clean.every((b) => b >= 0x20 && b < 0x7F);
-          final result = isAscii
-              ? String.fromCharCodes(clean)
-              : clean.map((b) => b.toRadixString(16).padLeft(2,'0').toUpperCase()).join();
-          print('✅ _readPid[$index] dataArray: "$result" status=$status');
-          return ['true', result];
-        }
-        print('   resp: status=$status pidId=${resp.pidId}');
+        if (dsOk) break; // DiagSession succeeded but no data → no retry
       }
     } catch (e) {
       print('❌ _readPid[$index] EXCEPTION: $e');
-      print('   Stack: check if DongleComm/UDSDiagnostic is properly initialized');
     }
-    print('⚠️  _readPid[$index] type=$pidType → no valid response found, returning false');
+    print('⚠️  _readPid[$index] $pidType → false');
     return ['false', ''];
   }
 
-  String _hexR(dynamic r) {
+  String _hex(dynamic r) {
     if (r == null) return 'null';
-    if (r is Uint8List) return r.map((e) => e.toRadixString(16).padLeft(2,'0').toUpperCase()).join(' ');
+    if (r is Uint8List) return r.map((e) => e.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
     return r.toString();
   }
 
@@ -255,62 +333,88 @@ class WiFiPlugin {
   Future<List<String>> getCVN  (String ip, int i, List p) => _readPid(i, p, pidType: 'CVN');
 
   // ─────────────────────────────────────────────────────────
-  //  startECUFlashing
-  //  Mirrors .NET: CAN_StartTP → ReadJson(SREC→JSON) → FlashInterpreter → CAN_StopTP
+  //  startECUFlashing — mirrors .NET StartECUFlashing()
+  //  .NET: CAN_StartTP → FlashInterpreter → CAN_StopTP
+  //  Both BATCH and INDIVIDUAL use this same method
+  //  Auto-reconnect if dongle drops mid-flash
   // ─────────────────────────────────────────────────────────
   Future<String> startECUFlashing({
-    required String ip,            required int    index,
-    required String seqFileContent, required String hexFileContent,
-    required String seedKeyIndex,   required String txHeader,
-    required String rxHeader,       required String protocolHex,
-    required Function(double) onProgress, required Function(String) onStatus,
+    required String ip,
+    required int    index,
+    required String seqFileContent,
+    required String hexFileContent,
+    required String seedKeyIndex,
+    required String txHeader,
+    required String rxHeader,
+    required String protocolHex,
+    required Function(double) onProgress,
+    required Function(String) onStatus,
   }) async {
     try {
-      final slot = _slots[index];
+      var slot = _slots[index];
       if (slot == null || !slot.ready || slot.diag == null) {
-        return 'ERROR: slot $index not ready';
+        // Try reconnect first
+        print('⚠️ slot $index not ready → reconnecting...');
+        final ok = await _reconnect(index);
+        if (!ok) return 'ERROR: slot $index not ready';
+        slot = _slots[index]!;
       }
 
-      // Convert SREC → FlashingMatrixData (mirrors .NET ReadJson → GetJson.ConvertToJson)
-      print('🔄 Converting SREC→JSON: ${hexFileContent.length} chars');
+      // Convert SREC → FlashingMatrixData (mirrors .NET ConvertToJson)
+      print('🔄 Converting SREC[$index]: ${hexFileContent.length} chars');
       final jsonData = _srecToFlashingMatrixData(seqFileContent, hexFileContent);
       if (jsonData == null || (jsonData.noOfSectors ?? 0) == 0) {
-        return 'ERROR: SREC conversion failed — check seq/hex files';
+        return 'ERROR: SREC conversion failed';
       }
-      print('✅ SREC converted: ${jsonData.noOfSectors} sectors');
+      print('✅ SREC[$index]: ${jsonData.noOfSectors} sectors');
 
-      // Map seedKeyIndex string → SEEDKEYINDEXTYPE enum
       final seedEnum = SEEDKEYINDEXTYPE.values.firstWhere(
         (e) => e.name == seedKeyIndex,
         orElse: () => SEEDKEYINDEXTYPE.RE_SEEDKEY_EPM44,
       );
 
-      print('▶️  startECUFlashing[$index]: CAN_StartTP...');
+      // .NET: await dongleCommWin.CAN_StartTP(ecu_index)
+      print('▶️  CAN_StartTP[$index]...');
       await slot.dongle!.canStartTP();
-      await Future.delayed(const Duration(milliseconds: 200));
+      await _ms(200);
 
-      print('▶️  startECUFlashing[$index]: flashInterpreter '
-            'seed=$seedKeyIndex sectors=${jsonData.noOfSectors}...');
-      final result = await slot.diag!.flashInterpreter(
-        FlashConfig(seedKeyIndex: seedEnum),
-        jsonData.noOfSectors!, jsonData.sectorData!, seqFileContent,
-      ) ?? 'NOERROR';
+      // .NET: response = await dSDiagnostic.FlashInterpreter(...)
+      // SEED KEY LOCK: only ONE ECU does 2701/2702 at a time on shared CAN bus
+      // After seed key (~1-2 sec), lock releases so next ECU can do its seed key
+      // Bulk data (sendbulkdata) runs in parallel after all seed keys complete
+      print('▶️  flashInterpreter[$index] seed=$seedKeyIndex sectors=${jsonData.noOfSectors}');
 
-      print('⏹️  startECUFlashing[$index]: CAN_StopTP result=$result');
-       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
-        print('   ✅ FLASH SUCCESS: ECU flashed successfully!');
-        return 'NOERROR';
-      } else if (result.contains('INVALIDKEY')) {
-        print('   ❌ INVALIDKEY: Seed key rejected by ECU');
-        print('   → ECU seed: check if ECU needs power cycle');
-        print('   → Algorithm: RE_SEEDKEY_EPM44 with secret 13A120A0...');
-      
-      } else if (result.contains('SERVICENOTSUPPORTED')) {
-        print('   ❌ ECU in wrong session — power cycle ECU');
-      } else if (result.contains('ERROR')) {
-        print('   ❌ FLASH FAILED: \$result');
+      // Flash sequentially via controller (Future.wait won't help with shared CAN bus)
+      String result = 'No Resp From Dongle';
+      try {
+        result = await slot.diag!.flashInterpreter(
+              FlashConfig(seedKeyIndex: seedEnum),
+              jsonData.noOfSectors!,
+              jsonData.sectorData!,
+              seqFileContent,
+            ) ?? 'NOERROR';
+      } catch (e) {
+        print('❌ flashInterpreter[$index] exception: $e');
+        if (!slot.ctrl.isConnected.value) {
+          print('🔌 Dongle $index disconnected during flash');
+        }
+        result = 'No Resp From Dongle';
       }
-      await slot.dongle!.canStopTP();
+
+      print('⏹️  startECUFlashing[$index]: result=$result');
+
+      // .NET: await dongleCommWin.CAN_StopTP(ecu_index)
+      try {
+        await slot.dongle!.canStopTP();
+      } catch (e) {
+        print('⚠️  CAN_StopTP[$index] failed (dongle may have disconnected): $e');
+      }
+
+      // .NET treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
+      if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
+        print('   ✅ FLASH SUCCESS[$index]!');
+        return 'NOERROR';
+      }
 
       return result;
     } catch (e) {
@@ -320,56 +424,54 @@ class WiFiPlugin {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  SREC → FlashingMatrixData converter
-  //  Mirrors .NET GetJson.ConvertToJson(stream, ecuMapFiles, checksumAlgo)
+  //  SREC → FlashingMatrixData
+  //  Mirrors .NET GetJson.ConvertToJson()
   // ─────────────────────────────────────────────────────────
-  FlashingMatrixData? _srecToFlashingMatrixData(String seqFile, String srecFile) {
+  FlashingMatrixData? _srecToFlashingMatrixData(
+      String seqFile, String srecFile) {
     try {
       // Parse EcuMapFile address ranges from seq file
       final ranges = <_AddrRange>[];
       for (final raw in seqFile.split('\n')) {
         final line = raw.replaceAll('\r', '').trim();
         if (!line.startsWith('EcuMapFile:')) continue;
-        final startMatch = RegExp(r'start_address,([0-9A-Fa-fx]+)').firstMatch(line);
-        final endMatch   = RegExp(r'end_address,([0-9A-Fa-fx]+)').firstMatch(line);
-        if (startMatch != null && endMatch != null) {
-          final start = int.parse(startMatch.group(1)!.replaceAll('0x',''), radix: 16);
-          final end   = int.parse(endMatch.group(1)!.replaceAll('0x',''), radix: 16);
+        final startM = RegExp(r'start_address,([0-9A-Fa-fx]+)').firstMatch(line);
+        final endM   = RegExp(r'end_address,([0-9A-Fa-fx]+)').firstMatch(line);
+        if (startM != null && endM != null) {
+          final start = int.parse(startM.group(1)!.replaceAll('0x', ''), radix: 16);
+          final end   = int.parse(endM.group(1)!.replaceAll('0x', ''), radix: 16);
           ranges.add(_AddrRange(start, end));
-          print('  EcuMapFile: 0x${start.toRadixString(16)} - 0x${end.toRadixString(16)}');
+          print('  EcuMapFile: 0x${start.toRadixString(16)} → 0x${end.toRadixString(16)}');
         }
       }
 
-      // Parse SREC S1/S2/S3 records → address→byte map
+      // Parse SREC S1/S2/S3 records
       final addrMap = <int, int>{};
       for (final raw in srecFile.split('\n')) {
         final line = raw.replaceAll('\r', '').trim();
         if (line.length < 4) continue;
         final type = line.substring(0, 2).toUpperCase();
-        if (!['S1','S2','S3'].contains(type)) continue;
+        if (!['S1', 'S2', 'S3'].contains(type)) continue;
         final byteCount = int.parse(line.substring(2, 4), radix: 16);
         final addrLen   = type == 'S1' ? 2 : type == 'S2' ? 3 : 4;
         final addrEnd   = 4 + addrLen * 2;
         if (addrEnd > line.length) continue;
-        final addr      = int.parse(line.substring(4, addrEnd), radix: 16);
-        final dataEnd   = 4 + byteCount * 2 - 2; // exclude CRC byte
+        final addr    = int.parse(line.substring(4, addrEnd), radix: 16);
+        final dataEnd = 4 + byteCount * 2 - 2;
         if (dataEnd > line.length) continue;
-        final dataHex   = line.substring(addrEnd, dataEnd);
+        final dataHex = line.substring(addrEnd, dataEnd);
         for (int i = 0; i < dataHex.length - 1; i += 2) {
-          addrMap[addr + i ~/ 2] = int.parse(dataHex.substring(i, i + 2), radix: 16);
+          addrMap[addr + i ~/ 2] =
+              int.parse(dataHex.substring(i, i + 2), radix: 16);
         }
       }
       print('  SREC parsed: ${addrMap.length} bytes');
-      if (addrMap.isEmpty) {
-        print('  ❌ SREC parse failed — no S1/S2/S3 records found');
-        print('  First 100 chars of srecFile: ${srecFile.substring(0, srecFile.length > 100 ? 100 : srecFile.length)}');
-      }
+      if (addrMap.isEmpty) return null;
 
       final sectors = <FlashingMatrix>[];
 
       if (ranges.isEmpty) {
-        // Auto-detect: group consecutive addresses into sectors (gap > 256 = new sector)
-        if (addrMap.isEmpty) return null;
+        // Auto-detect: gap > 256 bytes = new sector
         final sorted = addrMap.keys.toList()..sort();
         var secStart = sorted.first;
         var prev     = sorted.first;
@@ -379,22 +481,21 @@ class WiFiPlugin {
             sectors.add(_makeSector(secStart, prev, buf.toString()));
             secStart = addr; buf.clear();
           }
-          buf.write(addrMap[addr]!.toRadixString(16).padLeft(2,'0').toUpperCase());
+          buf.write(addrMap[addr]!.toRadixString(16).padLeft(2, '0').toUpperCase());
           prev = addr;
         }
         if (buf.isNotEmpty) sectors.add(_makeSector(secStart, prev, buf.toString()));
       } else {
-        // Use EcuMapFile address ranges from seq file
         for (final range in ranges) {
           final buf = StringBuffer();
           for (int addr = range.start; addr <= range.end; addr++) {
-            buf.write((addrMap[addr] ?? 0xFF).toRadixString(16).padLeft(2,'0').toUpperCase());
+            buf.write((addrMap[addr] ?? 0xFF).toRadixString(16).padLeft(2, '0').toUpperCase());
           }
           sectors.add(_makeSector(range.start, range.end, buf.toString()));
         }
       }
 
-      print('  Sectors built: ${sectors.length}');
+      print('  Sectors: ${sectors.length}');
       return FlashingMatrixData(noOfSectors: sectors.length, sectorData: sectors);
     } catch (e) {
       print('❌ _srecToFlashingMatrixData: $e');
@@ -402,20 +503,21 @@ class WiFiPlugin {
     }
   }
 
-  FlashingMatrix _makeSector(int start, int end, String dataHex) => FlashingMatrix(
-    jsonStartAddress:      start.toRadixString(16).toUpperCase().padLeft(8,'0'),
-    jsonEndAddress:        end.toRadixString(16).toUpperCase().padLeft(8,'0'),
-    jsonData:              dataHex,
-    ecuMemMapStartAddress: start.toRadixString(16).toUpperCase().padLeft(8,'0'),
-    ecuMemMapEndAddress:   end.toRadixString(16).toUpperCase().padLeft(8,'0'),
-    jsonCheckSum:          '',
-  );
+  FlashingMatrix _makeSector(int start, int end, String dataHex) =>
+      FlashingMatrix(
+        jsonStartAddress:      start.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonEndAddress:        end.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonData:              dataHex,
+        ecuMemMapStartAddress: start.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        ecuMemMapEndAddress:   end.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonCheckSum: '',
+      );
 
   Future<void> resetDongle(String ip, int index) async {
     try {
       final slot = _slots[index];
       if (slot?.dongle != null) await slot!.dongle!.resetDongle();
-    } catch (e) { print('❌ reset: $e'); }
+    } catch (e) { print('❌ resetDongle[$index]: $e'); }
   }
 }
 

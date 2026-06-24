@@ -44,7 +44,7 @@ class IndividualRowModel {
     this.status='',
     this.isDongleAvailable=false, this.isEcuAvailable=false,
     this.dongleFlashingIndicator=false, this.ecuFlashingIndicator=false,
-    this.dongleStatusColor=Colors.red, this.ecuStatusColor=Colors.red,
+    this.dongleStatusColor=const Color(0xFFF44336), this.ecuStatusColor=const Color(0xFFF44336),
     this.ecuSrNo='', this.ecuSrNoAfter='', this.hardwarePartNumber='',
     this.swVersionBefore='', this.swVersionAfter='',
     this.calIdBefore='', this.calId='', this.printCalId='',
@@ -53,9 +53,9 @@ class IndividualRowModel {
     this.isflashing=false, this.flashingAvailabel=false,
     this.fileType='NA', this.flashTimer='00:00', this.flashPercent='0.0 %',
     this.progress=0, this.isProgressVisible=false,
-    this.statusColor=Colors.white, this.reportColor=Colors.white,
-    this.printButtonDisable=true, this.printButtonColor=Colors.grey,
-    this.playButtonDisable=true, this.playButtonColor=Colors.grey,
+    this.statusColor=const Color(0xFFFFFFFF), this.reportColor=const Color(0xFFFFFFFF),
+    this.printButtonDisable=true, this.printButtonColor=const Color(0xFF9E9E9E),
+    this.playButtonDisable=true, this.playButtonColor=const Color(0xFF9E9E9E),
     this.playButtonVisible=true,
     this.ecuStatus=true, this.ecuStatus1='', this.alreadyMessage=false,
     this.isDongle=false,
@@ -288,13 +288,13 @@ class IndividualFlashController extends GetxController {
       for (final item in tableInfo) {
         if (!item.isflashing) {
           item.status=''; item.isDongleAvailable=false; item.isEcuAvailable=false;
-          item.dongleStatusColor=Colors.red; item.dongleFlashingIndicator=false;
-          item.ecuFlashingIndicator=false; item.ecuStatusColor=Colors.red;
+          item.dongleStatusColor=const Color(0xFFF44336); item.dongleFlashingIndicator=false;
+          item.ecuFlashingIndicator=false; item.ecuStatusColor=const Color(0xFFF44336);
           item.ecuSrNo=''; item.flashTimer='00:00'; item.flashPercent='0.0 %';
-          item.statusColor=Colors.white; item.reportColor=Colors.white;
+          item.statusColor=const Color(0xFFFFFFFF); item.reportColor=const Color(0xFFFFFFFF);
           item.flashingCompleted=false; item.printButtonDisable=true;
-          item.printButtonColor=Colors.grey; item.playButtonDisable=true;
-          item.playButtonColor=Colors.grey; item.isflashing=false;
+          item.printButtonColor=const Color(0xFF9E9E9E); item.playButtonDisable=true;
+          item.playButtonColor=const Color(0xFF9E9E9E); item.isflashing=false;
           item.playButtonVisible=true; item.flashingAvailabel=false;
           item.fileType='NA'; item.hardwarePartNumber='';
           item.ecuStatus=true; item.ecuStatus1=''; item.alreadyMessage=false;
@@ -367,10 +367,10 @@ class IndividualFlashController extends GetxController {
           device.isDongle = await _wifi.checkDongle(device.ipAddress, device.index);
           if (device.isDongle) {
             device.dongleFlashingIndicator = true;
-            device.dongleStatusColor       = Colors.green;
+            device.dongleStatusColor       = const Color(0xFF4CAF50);
           } else {
             device.dongleFlashingIndicator = false;
-            device.dongleStatusColor       = Colors.red;
+            device.dongleStatusColor       = const Color(0xFFF44336);
             device.ecuStatus  = false;
             device.ecuStatus1 = 'Dongle ${device.srNo} not found.';
           }
@@ -393,7 +393,7 @@ class IndividualFlashController extends GetxController {
             device.ecuFlashingIndicator = true;
             device.ecuSrNo              = res[1];
             device.isEcuAvailable       = true;
-            device.ecuStatusColor       = Colors.green;
+            device.ecuStatusColor       = const Color(0xFF4CAF50);
             print('  ✅ ECU[${device.srNo}] ESN=${res[1]}');
           } else {
             device.ecuSrNo              = res.length > 1 ? res[1] : '';
@@ -642,7 +642,7 @@ class IndividualFlashController extends GetxController {
 
     // Prepare all devices first (assign files, update UI)
     for (final item in eligible) {
-      item.playButtonDisable = true; item.playButtonColor = Colors.grey;
+      item.playButtonDisable = true; item.playButtonColor = const Color(0xFF9E9E9E);
       item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
       item.progress = 0; item.isflashing = true;
 
@@ -679,7 +679,7 @@ class IndividualFlashController extends GetxController {
   Future<void> startIndividualFlash(IndividualRowModel item) async {
     // .NET: StartIndivisualFlashingCommand — no flashingAvailabel check, always proceeds
     try {
-      item.playButtonDisable = true; item.playButtonColor = Colors.grey;
+      item.playButtonDisable = true; item.playButtonColor = const Color(0xFF9E9E9E);
       item.flashTimer = '00:00'; item.flashPercent = '0.0 %';
       item.progress = 0; item.isflashing = true;
       tableInfo.refresh();
@@ -736,14 +736,14 @@ class IndividualFlashController extends GetxController {
       if (device.jsonFile.isEmpty || device.seqFile.isEmpty) {
         print('❌ File missing: json=${device.jsonFile.length} seq=${device.seqFile.length}');
         device.status = 'File not found'; device.flashingCompleted = true;
-        device.isflashing = false; device.statusColor = Colors.red;
+        device.isflashing = false; device.statusColor = const Color(0xFFF44336);
         tableInfo.refresh(); return;
       }
 
       // .NET: status_color = Color.Yellow before timers
-      device.printButtonDisable = true; device.printButtonColor = Colors.grey;
+      device.printButtonDisable = true; device.printButtonColor = const Color(0xFF9E9E9E);
       device.status             = 'flashing in progress...';
-      device.statusColor        = Colors.yellow;
+      device.statusColor        = const Color(0xFFFFEB3B);
       tableInfo.refresh();
 
       // .NET order: stopWatch.Start() → timer.Start() → percentTimer.Start() → IsProgressVisivle=true
@@ -799,7 +799,7 @@ class IndividualFlashController extends GetxController {
 
       device.flashingCompleted = true;
       device.isflashing        = false;
-      device.reportColor       = Colors.yellow;
+      device.reportColor       = const Color(0xFFFFEB3B);
       final result = flashResult.isNotEmpty ? flashResult : 'ERROR';
 
       // .NET EXACT ORDER:
@@ -813,13 +813,13 @@ class IndividualFlashController extends GetxController {
         print('   ✅ FLASH SUCCESS!');
         await Future.delayed(const Duration(seconds: 3)); // .NET: Thread.Sleep(3000)
         device.flashingSuccess = true;
-        device.statusColor     = Colors.green;
+        device.statusColor     = const Color(0xFF4CAF50);
         device.status          = 'Flashing completed'; // show green status NOW
         device.flashPercent    = '100.0%';
         device.progress        = 1.0;
       } else {
         print('   ❌ Flash failed: $result');
-        device.statusColor = Colors.red;
+        device.statusColor = const Color(0xFFF44336);
         device.status      = result; // show error status
       }
       tableInfo.refresh();
@@ -835,7 +835,7 @@ class IndividualFlashController extends GetxController {
       // Enable buttons after everything
       if (result == 'NOERROR') {
         device.playButtonDisable = true;
-        device.playButtonColor   = Colors.grey;
+        device.playButtonColor   = const Color(0xFF9E9E9E);
         final scanQr = sub?.scanQrCode ?? false;
         if (!scanQr) {
           device.printButtonDisable = false;
@@ -910,12 +910,12 @@ class IndividualFlashController extends GetxController {
       final sr  = await request.send();
       final res = await http.Response.fromStream(sr);
       device.reportColor = (res.statusCode == 200 || res.statusCode == 201)
-          ? Colors.green : Colors.red;
+          ? const Color(0xFF4CAF50) : const Color(0xFFF44336);
       tableInfo.refresh();
       print('📡 create-ecu-pfs/ ${res.statusCode} status=${passed ? "Pass" : "Fail"}');
     } catch (e) {
       print('❌ _getPdfContentAndPost: $e');
-      device.reportColor = Colors.red;
+      device.reportColor = const Color(0xFFF44336);
       tableInfo.refresh();
     }
   }
@@ -928,13 +928,13 @@ class IndividualFlashController extends GetxController {
       print('❌ printSticker: $e');
     } finally {
       device.status=''; device.isDongleAvailable=false; device.isEcuAvailable=false;
-      device.dongleStatusColor=Colors.red; device.dongleFlashingIndicator=false;
-      device.ecuFlashingIndicator=false; device.ecuStatusColor=Colors.red;
+      device.dongleStatusColor=const Color(0xFFF44336); device.dongleFlashingIndicator=false;
+      device.ecuFlashingIndicator=false; device.ecuStatusColor=const Color(0xFFF44336);
       device.ecuSrNo=''; device.flashTimer='00:00'; device.flashPercent='0.0 %';
-      device.statusColor=Colors.white; device.reportColor=Colors.white;
+      device.statusColor=const Color(0xFFFFFFFF); device.reportColor=const Color(0xFFFFFFFF);
       device.flashingCompleted=false; device.printButtonDisable=true;
-      device.printButtonColor=Colors.grey; device.playButtonDisable=true;
-      device.playButtonColor=Colors.grey; device.playButtonVisible=true;
+      device.printButtonColor=const Color(0xFF9E9E9E); device.playButtonDisable=true;
+      device.playButtonColor=const Color(0xFF9E9E9E); device.playButtonVisible=true;
       device.isflashing=false; device.flashingAvailabel=false; device.fileType='NA';
       device.hardwarePartNumber=''; device.ecuStatus=true;
       device.ecuStatus1=''; device.alreadyMessage=false; device.isDongle=false;
