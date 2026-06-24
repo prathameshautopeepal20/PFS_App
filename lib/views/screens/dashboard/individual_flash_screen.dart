@@ -524,9 +524,14 @@ class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.color});
   @override
   Widget build(BuildContext context) {
-    final isPass    = color == _cPass    || color == Colors.green;
-    final isFail    = color == _cFail    || color == Colors.red;
-    final isRunning = color == Colors.yellow || color == _cYellow;
+    final isPass    = color == _cPass    || color == Colors.green
+                    || color == const Color(0xFF4CAF50)  // Material green (individual controller)
+                    || color == const Color(0xFF22C55E); // cGreen
+    final isFail    = color == _cFail    || color == Colors.red
+                    || color == const Color(0xFFF44336)  // Material red (individual controller)
+                    || color == const Color(0xFFEF4444); // cFail
+    final isRunning = color == Colors.yellow || color == _cYellow
+                    || color == const Color(0xFFFFEB3B); // Material yellow (individual controller)
 
     final Color bc;
     final IconData ico;

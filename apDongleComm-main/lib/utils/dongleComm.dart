@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:synchronized/synchronized.dart';
 import 'package:ap_dongle_comm/utils/commController.dart';
 import 'package:ap_dongle_comm/utils/enums/command_ids.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
@@ -11,6 +12,12 @@ import 'package:ap_dongle_comm/utils/model/sessionLogModel.dart';
 import 'package:convert/convert.dart';
 
 class DongleComm {
+  // Global CAN bus lock — serializes CAN frames across all ECUs on shared bus
+  // Mirrors .NET Task.Run + task.Wait() behavior: one frame sent/received at a time
+  // But since lock is per send+receive cycle (~5-50ms), both ECUs still run in parallel
+  // Total overhead: negligible — ECU1 sends while ECU2 waits 5ms, then swap
+  static final Lock _canBusLock = Lock();
+
   CommController? comm;
   bool isChannel;
   String? channelId;
@@ -405,11 +412,11 @@ class DongleComm {
 
   Future<ResponseArrayStatus> can2xTxRx(int framelength, String txdata) async {
     ResponseArrayStatus responseStructure;
-
+    // Global CAN bus lock — one send+receive cycle at a time
+    // Each cycle is ~5-50ms, so both ECUs still flash in parallel effectively
+    return await _canBusLock.synchronized(() async {
     try {
       print("------ENTER CAN_TxRx------");
-
-      // await semaphoreSlim.wait();
       print("[INFO] Semaphore acquired at ${DateTime.now()}");
 
       logs.add(SessionLogsModel(header: "Tx", message: txdata));
@@ -655,10 +662,10 @@ class DongleComm {
 
       return responseStructure;
     } finally {
-      // semaphoreSlim.release();
       print("[INFO] Semaphore released at ${DateTime.now()}");
       print("------EXIT CAN_TxRx------");
     }
+    }); // end _canBusLock.synchronized
   }
 
   String byteArrayToHex(Uint8List bytes) {

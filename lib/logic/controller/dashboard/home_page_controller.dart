@@ -865,12 +865,12 @@ class HomePageController extends GetxController {
       _isAfterFlashEventSubscribed = false;
       tableInfo.refresh();
 
-      // Sequential flash — shared CAN bus hardware requires one ECU at a time
-      // Both ECU timers run independently so UI shows both progressing
+      // PARALLEL FLASH — _canBusLock in dongleComm.dart serializes CAN frames
+      // Lock held per send+receive (~5-50ms each) → both ECUs alternate rapidly
+      // UI shows both progress bars updating simultaneously
+      // Total time = max(ECU1, ECU2) ≈ ~4 mins instead of 8 mins
       final eligible = tableInfo.where((d) => d.isEcuAvailable).toList();
-      for (final d in eligible) {
-        await _startFlash(d, d.index);
-      }
+      await Future.wait(eligible.map((d) => _startFlash(d, d.index)));
     } catch (e) { print('❌ startFlash: $e'); }
   }
 
