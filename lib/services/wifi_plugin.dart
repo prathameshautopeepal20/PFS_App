@@ -4,13 +4,13 @@
 // Fix: auto-reconnect if dongle disconnects during flash
 
 import 'dart:typed_data';
+import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
 import 'package:ap_diagnostic/models/flashingMtrixModel.dart';
 import 'package:ap_diagnostic/models/readParameterPIDModel.dart';
 import 'package:ap_diagnostic/structure/flash_structures.dart';
 import 'package:ap_diagnostic/usd_diagnostic.dart';
-import 'package:ap_dongle_comm/utils/commController.dart';
-import 'package:ap_dongle_comm/utils/dongleComm.dart';
+import 'package:ap_dongle_comm/utils/commController.dart' hide DongleComm;
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
@@ -61,6 +61,14 @@ class WiFiPlugin {
   UDSDiagnostic? getDiag(int index) => _slots[index]?.diag;
 
   // ─────────────────────────────────────────────────────────
+  // Clear socket buffer for a slot — removes stale data before post-flash reads
+  Future<void> clearBuffer(int index) async {
+    try {
+      final slot = _slots[index];
+      if (slot != null) await slot.ctrl.clearBuffer();
+    } catch (_) {}
+  }
+
   //  checkDongle — mirrors .NET CheckClient_N()
   //  Closes existing connection, reconnects, creates DongleComm
   //  TX=7E0 forced (server sends 7DF which ECU ignores)
@@ -361,7 +369,7 @@ class WiFiPlugin {
       }
 
       // Convert SREC → FlashingMatrixData (mirrors .NET ConvertToJson)
-      print('🔄 Converting SREC[$index]: ${hexFileContent.length} chars');
+      print('🔄 Converting SREC[$index]: \${hexFileContent.length} chars');
       final jsonData = _srecToFlashingMatrixData(seqFileContent, hexFileContent);
       if (jsonData == null || (jsonData.noOfSectors ?? 0) == 0) {
         return 'ERROR: SREC conversion failed';
@@ -524,4 +532,89 @@ class WiFiPlugin {
 class _AddrRange {
   final int start, end;
   _AddrRange(this.start, this.end);
+}
+
+// ── Top-level function for compute() isolate ──────────────────────────────
+// Must be top-level (not class method) for compute() to work.
+// Takes [seqFileContent, hexFileContent] as a list argument.
+// This runs in a separate OS thread via Flutter's compute() — true parallel!
+FlashingMatrixData? _srecToFlashingMatrixDataIsolate(List<String> args) {
+  final seqFile  = args[0];
+  final srecFile = args[1];
+  try {
+    // Parse EcuMapFile address ranges from seq file
+    final ranges = <_AddrRange>[];
+    for (final raw in seqFile.split('\n')) {
+      final line = raw.replaceAll('\r', '').trim();
+      if (!line.startsWith('EcuMapFile:')) continue;
+      final startM = RegExp(r'start_address,([0-9A-Fa-fx]+)').firstMatch(line);
+      final endM   = RegExp(r'end_address,([0-9A-Fa-fx]+)').firstMatch(line);
+      if (startM != null && endM != null) {
+        final s = int.parse(startM.group(1)!.replaceAll('0x', ''), radix: 16);
+        final e = int.parse(endM.group(1)!.replaceAll('0x', ''), radix: 16);
+        ranges.add(_AddrRange(s, e));
+      }
+    }
+
+    // Parse SREC S1/S2/S3 records
+    final addrMap = <int, int>{};
+    for (final raw in srecFile.split('\n')) {
+      final line = raw.replaceAll('\r', '').trim();
+      if (line.length < 4) continue;
+      final type = line.substring(0, 2).toUpperCase();
+      if (!['S1', 'S2', 'S3'].contains(type)) continue;
+      final byteCount = int.parse(line.substring(2, 4), radix: 16);
+      final addrLen   = type == 'S1' ? 2 : type == 'S2' ? 3 : 4;
+      final addrEnd   = 4 + addrLen * 2;
+      if (addrEnd > line.length) continue;
+      final addr    = int.parse(line.substring(4, addrEnd), radix: 16);
+      final dataEnd = 4 + byteCount * 2 - 2;
+      if (dataEnd > line.length) continue;
+      final dataHex = line.substring(addrEnd, dataEnd);
+      for (int i = 0; i < dataHex.length - 1; i += 2) {
+        addrMap[addr + i ~/ 2] = int.parse(dataHex.substring(i, i + 2), radix: 16);
+      }
+    }
+    if (addrMap.isEmpty) return null;
+
+    FlashingMatrix makeSector(int start, int end, String dataHex) =>
+      FlashingMatrix(
+        jsonStartAddress:      start.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonEndAddress:        end.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonData:              dataHex,
+        ecuMemMapStartAddress: start.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        ecuMemMapEndAddress:   end.toRadixString(16).toUpperCase().padLeft(8, '0'),
+        jsonCheckSum: '',
+      );
+
+    final sectors = <FlashingMatrix>[];
+
+    if (ranges.isEmpty) {
+      final sorted = addrMap.keys.toList()..sort();
+      var secStart = sorted.first;
+      var prev     = sorted.first;
+      final buf    = StringBuffer();
+      for (final addr in sorted) {
+        if (addr - prev > 256 && buf.isNotEmpty) {
+          sectors.add(makeSector(secStart, prev, buf.toString()));
+          secStart = addr; buf.clear();
+        }
+        buf.write(addrMap[addr]!.toRadixString(16).padLeft(2, '0').toUpperCase());
+        prev = addr;
+      }
+      if (buf.isNotEmpty) sectors.add(makeSector(secStart, prev, buf.toString()));
+    } else {
+      for (final range in ranges) {
+        final buf = StringBuffer();
+        for (int addr = range.start; addr <= range.end; addr++) {
+          buf.write((addrMap[addr] ?? 0xFF).toRadixString(16).padLeft(2, '0').toUpperCase());
+        }
+        sectors.add(makeSector(range.start, range.end, buf.toString()));
+      }
+    }
+
+    return FlashingMatrixData(noOfSectors: sectors.length, sectorData: sectors);
+  } catch (e) {
+    return null;
+  }
 }

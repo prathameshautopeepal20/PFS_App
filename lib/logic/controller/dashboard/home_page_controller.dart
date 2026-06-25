@@ -14,6 +14,8 @@ import 'package:atpl_flashing_app/logic/controller/dashboard/flash_process_contr
 import 'package:atpl_flashing_app/services/wifi_plugin.dart';
 
 final _wifi = WiFiPlugin.instance;
+// Mutex for post-flash sequential reads
+bool _postFlashLocked = false;
 
 // ── Color constants — no MaterialColor crash ──────────────────
 const _cRed    = Color(0xFFF44336);
@@ -865,11 +867,30 @@ class HomePageController extends GetxController {
       _isAfterFlashEventSubscribed = false;
       tableInfo.refresh();
 
-      // PARALLEL FLASH — _canBusLock in dongleComm.dart serializes CAN frames
-      // Lock held per send+receive (~5-50ms each) → both ECUs alternate rapidly
-      // UI shows both progress bars updating simultaneously
-      // Total time = max(ECU1, ECU2) ≈ ~4 mins instead of 8 mins
+      // PARALLEL FLASH
+      // Step 1: Pre-fetch calId/CVN sequentially (uses socket - must be sequential)
+      // Step 2: Start actual flash simultaneously via Future.wait
+      // Each ECU then uses its own socket/buffer/Completer - no interference
       final eligible = tableInfo.where((d) => d.isEcuAvailable).toList();
+
+      // Pre-fetch sequentially to avoid socket race condition
+      for (final d in eligible) {
+        if (d.calIdBefore.isEmpty) {
+          final pid = _getPidByType('CALID');
+          final res = await _wifi.getCalId(d.ipAddress, d.index, pid);
+          d.calIdBefore = res[1];
+        }
+        if (d.cvnBefore.isEmpty) {
+          final pid = _getPidByType('CVN');
+          final res = await _wifi.getCVN(d.ipAddress, d.index, pid);
+          d.cvnBefore = res[1];
+        }
+      }
+
+      // TRUE PARALLEL FLASH — mirrors working .NET behavior exactly
+      // _canBusLock in dongleComm.dart (static Lock) serializes each CAN frame
+      // Both ECUs run Future.wait simultaneously, alternating frames every ~5-50ms
+      // Total time ≈ ~6 mins (both ECUs flashing at same time) ✅
       await Future.wait(eligible.map((d) => _startFlash(d, d.index)));
     } catch (e) { print('❌ startFlash: $e'); }
   }
@@ -883,17 +904,8 @@ class HomePageController extends GetxController {
       device.flashingSuccess = false;
       tableInfo.refresh();
 
-      // .NET: if cal_id_before empty → GetCalId; if cvn_before empty → GetCVN
-      if (device.calIdBefore.isEmpty) {
-        final pid = _getPidByType('CALID');
-        final res = await _wifi.getCalId(device.ipAddress, device.index, pid);
-        device.calIdBefore = res[1];
-      }
-      if (device.cvnBefore.isEmpty) {
-        final pid = _getPidByType('CVN');
-        final res = await _wifi.getCVN(device.ipAddress, device.index, pid);
-        device.cvnBefore = res[1];
-      }
+      // calIdBefore/cvnBefore already pre-fetched sequentially before parallel start
+      // Skip individual fetch here to avoid socket race conditions in parallel mode
 
       if (device.jsonFile.isEmpty || device.seqFile.isEmpty) {
         device.status = 'File not found';
@@ -966,24 +978,35 @@ class HomePageController extends GetxController {
         device.flashingSuccess = true;
         device.statusColor     = _cGreen;
 
-        // Re-init dongle connection after flash (ECU reset clears CAN state)
-        final sub    = _selectedSubModel;
-        final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
-        final rawTx  = ecuSub?.txHeader ?? '';
-        final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
-        await _wifi.checkDongle(device.ipAddress, device.index,
-            txHeader: txHdr,
-            rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
-            protocolHex:  ecuSub?.protocolAutopeepal ?? '02');
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Wait for post-flash lock — sequential post-flash reads prevent socket clash
+        while (_postFlashLocked) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        _postFlashLocked = true;
+        // Clear buffer before post-flash reads - removes any stale data from other ECU
+        await _wifi.clearBuffer(device.index);
+        try {
+          // Re-init dongle connection after flash
+          final sub    = _selectedSubModel;
+          final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
+          final rawTx  = ecuSub?.txHeader ?? '';
+          final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
+          await _wifi.checkDongle(device.ipAddress, device.index,
+              txHeader: txHdr,
+              rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
+              protocolHex:  ecuSub?.protocolAutopeepal ?? '02');
+          await Future.delayed(const Duration(milliseconds: 500));
 
-        final calPid = _getPidByType('CALID');
-        final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
-        device.printCalId = calRes[1];
+          final calPid = _getPidByType('CALID');
+          final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
+          device.printCalId = calRes[1];
 
-        final cvnPid = _getPidByType('CVN');
-        final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
-        device.cvn = cvnRes[1];
+          final cvnPid = _getPidByType('CVN');
+          final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
+          device.cvn = cvnRes[1];
+        } finally {
+          _postFlashLocked = false;
+        }
       } else {
         device.statusColor = _cRed;
       }

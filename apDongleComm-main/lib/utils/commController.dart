@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_dongle_comm/utils/enums/command_ids.dart';
@@ -326,8 +327,8 @@ class CommController extends GetxController {
         final socket = _socket;
         if (socket == null) return null;
 
-        // Clear stale data before sending new command
-        _buffer.clear();
+        // DO NOT clear buffer here - parallel flash needs buffer intact
+        // Each CommController instance has its own _buffer - no cross-contamination
         socket.add(finalPacket);
         await socket.flush();
         print("📥 Waiting for WiFi response...");
@@ -373,6 +374,8 @@ class CommController extends GetxController {
 
     // ✅ Add incoming data
     _buffer.addAll(data);
+    // Notify completer if waiting for data - key to parallel flash!
+    _tryCompleteFromBuffer();
 
     // 🔍 Debug AFTER adding
     print("📥 RAW RX: ${bytesToHex(data)}");
@@ -507,6 +510,9 @@ class CommController extends GetxController {
   }
 
   List<int> _buffer = [];
+  // Completer-based response system for parallel flash
+  // Each sendCommand creates its own Completer - no shared state race condition
+  Completer<Uint8List?>? _responseCompleter;
 
   Future<Uint8List> _readExactBytes(int length, {int timeoutSec = 15}) async {
     final DateTime startTime = DateTime.now();
@@ -533,42 +539,55 @@ class CommController extends GetxController {
   }
 
 
-  // _readDirect: polls _buffer (filled by _socketSub._handleData)
-  // _socketSub already listens — we just poll _buffer directly
+  // _readDirect: Completer-based - mirrors .NET task.Wait()
+  // Each call creates its own Completer - no polling, no race conditions
+  // When _handleData gets enough bytes, it completes the Completer
+  // This is safe for parallel flash - each ECU has its own CommController instance
   Future<Uint8List?> _readDirect(Socket socket,
       {Duration timeout = const Duration(seconds: 10)}) async {
-    final deadline = DateTime.now().add(timeout);
+    // Set up completer for this specific request
+    _responseCompleter = Completer<Uint8List?>();
 
-    // Wait for at least 2 bytes (header)
-    while (_buffer.length < 2) {
-      if (DateTime.now().isAfter(deadline)) {
-        print('⏰ _readDirect: timeout waiting for header, buf=${_buffer.length}');
-        return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
+    // Set timeout
+    final timer = Timer(timeout, () {
+      if (!(_responseCompleter?.isCompleted ?? true)) {
+        print('⏰ _readDirect: timeout');
+        _responseCompleter?.complete(
+            Uint8List.fromList(utf8.encode('No Resp From Dongle')));
       }
-      await Future.delayed(const Duration(milliseconds: 1));
-    }
+    });
 
-    // Read header — calculate expected total
+    // Check if buffer already has data (arrived before we set up completer)
+    _tryCompleteFromBuffer();
+
+    try {
+      final result = await _responseCompleter!.future;
+      timer.cancel();
+      return result;
+    } catch (e) {
+      timer.cancel();
+      return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
+    }
+  }
+
+  // Called from _handleData AND from _readDirect setup
+  void _tryCompleteFromBuffer() {
+    if (_responseCompleter == null || _responseCompleter!.isCompleted) return;
+    if (_buffer.length < 2) return;
+
     final hdr0 = _buffer[0];
     final hdr1 = _buffer[1];
     final msgLen = ((hdr0 & 0x0F) << 8) + hdr1;
     final totalExpected = 2 + msgLen + 3;
     print('🧠 _readDirect: msgLen=$msgLen expecting=$totalExpected');
 
-    // Wait for full response
-    while (_buffer.length < totalExpected) {
-      if (DateTime.now().isAfter(deadline)) {
-        print('⏰ _readDirect: timeout waiting for body, have=${_buffer.length} need=$totalExpected');
-        break;
-      }
-      await Future.delayed(const Duration(milliseconds: 1));
+    if (_buffer.length >= totalExpected) {
+      final result = Uint8List.fromList(_buffer.sublist(0, totalExpected));
+      _buffer.removeRange(0, totalExpected);
+      print('✅ _readDirect: ${bytesToHex(result)}');
+      _responseCompleter!.complete(result);
+      _responseCompleter = null;
     }
-
-    final n = _buffer.length < totalExpected ? _buffer.length : totalExpected;
-    final result = Uint8List.fromList(_buffer.sublist(0, n));
-    _buffer.removeRange(0, n);
-    print('✅ _readDirect: ${bytesToHex(result)}');
-    return result;
   }
 
   Future<Uint8List> getWifiResponse() async {
