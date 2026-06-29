@@ -14,9 +14,6 @@ import 'package:atpl_flashing_app/logic/controller/dashboard/flash_process_contr
 import 'package:atpl_flashing_app/services/wifi_plugin.dart';
 
 final _wifi = WiFiPlugin.instance;
-// Mutex for post-flash sequential reads
-bool _postFlashLocked = false;
-
 // ── Color constants — no MaterialColor crash ──────────────────
 const _cRed    = Color(0xFFF44336);
 const _cGreen  = Color(0xFF4CAF50);
@@ -137,6 +134,10 @@ class HomePageController extends GetxController {
     _selectedSubModel = args['selectedSubModel'] as SubModel?;
     _downComFile      = args['downComFile']      ?? '';
     _downComSeqfile   = args['downComSeqfile']   ?? '';
+    // TEMP DEBUG: print first 500 chars of seq file to see format
+    print('=== SEQ FILE FIRST 500 CHARS ===');
+    print(_downComSeqfile.substring(0, _downComSeqfile.length.clamp(0, 500)));
+    print('=== SEQ FILE END ===');
     _downComFileUrl   = args['downComFileUrl']   ?? '';
     _downCalFile      = args['downCalFile']      ?? '';
     _downCalSeqfile   = args['downCalSeqfile']   ?? '';
@@ -322,6 +323,11 @@ class HomePageController extends GetxController {
   //        CheckCalId → CheckCVN (or GetCalId/GetCVN)
   // ════════════════════════════════════════════════════════════
   Future<void> checkEcuStatus() async {
+    // 🔥 Guard: do NOT run during flashing — would kill active sockets
+    if (tableInfo.any((x) => x.isflashing)) {
+      print('⚠️ checkEcuStatus blocked — flash in progress');
+      return;
+    }
     try {
       // .NET: reset all fields first
       for (final item in tableInfo) {
@@ -887,11 +893,18 @@ class HomePageController extends GetxController {
         }
       }
 
-      // TRUE PARALLEL FLASH — mirrors working .NET behavior exactly
-      // _canBusLock in dongleComm.dart (static Lock) serializes each CAN frame
-      // Both ECUs run Future.wait simultaneously, alternating frames every ~5-50ms
-      // Total time ≈ ~6 mins (both ECUs flashing at same time) ✅
-      await Future.wait(eligible.map((d) => _startFlash(d, d.index)));
+      // PARALLEL FLASH — both ECUs simultaneously
+      // eagerError: false = wait for ALL ECUs even if one fails
+      _wifi.setFlashInProgress(true);
+      try {
+        await Future.wait(
+          eligible.map((d) => _startFlash(d, d.index)),
+          eagerError: false,
+        );
+      } catch (e) {
+        print('⚠️ Future.wait error (non-fatal): $e');
+      }
+      _wifi.setFlashInProgress(false);
     } catch (e) { print('❌ startFlash: $e'); }
   }
 
@@ -978,12 +991,6 @@ class HomePageController extends GetxController {
         device.flashingSuccess = true;
         device.statusColor     = _cGreen;
 
-        // Wait for post-flash lock — sequential post-flash reads prevent socket clash
-        while (_postFlashLocked) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        _postFlashLocked = true;
-        // Clear buffer before post-flash reads - removes any stale data from other ECU
         await _wifi.clearBuffer(device.index);
         try {
           // Re-init dongle connection after flash
@@ -995,7 +1002,7 @@ class HomePageController extends GetxController {
               txHeader: txHdr,
               rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
               protocolHex:  ecuSub?.protocolAutopeepal ?? '02');
-          await Future.delayed(const Duration(milliseconds: 500));
+          await Future.delayed(const Duration(milliseconds: 100));
 
           final calPid = _getPidByType('CALID');
           final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
@@ -1004,8 +1011,8 @@ class HomePageController extends GetxController {
           final cvnPid = _getPidByType('CVN');
           final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
           device.cvn = cvnRes[1];
-        } finally {
-          _postFlashLocked = false;
+        } catch (e) {
+          print('❌ post-flash read error: $e');
         }
       } else {
         device.statusColor = _cRed;
@@ -1077,7 +1084,7 @@ class HomePageController extends GetxController {
   Future<void> _readAfterFlashData(TableInfoModel device) async {
     try {
       // Small delay to ensure ECU is stable after CAN_StopTP
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       final swPid  = _getPidByType('ESWV');
       final swRes  = await _wifi.getSW(device.ipAddress, device.index, swPid);

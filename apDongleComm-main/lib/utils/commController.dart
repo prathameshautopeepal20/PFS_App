@@ -51,7 +51,7 @@ class CommController extends GetxController {
       _socket = await Socket.connect(
         host,
         port,
-        timeout: const Duration(minutes: 1),
+        timeout: const Duration(seconds: 5),
       );
 
       print('✅ SOCKET CONNECTED $host:$port');
@@ -327,8 +327,12 @@ class CommController extends GetxController {
         final socket = _socket;
         if (socket == null) return null;
 
-        // DO NOT clear buffer here - parallel flash needs buffer intact
-        // Each CommController instance has its own _buffer - no cross-contamination
+        // 🔥 Clear stale data before sending — leftover bytes from previous
+        // frames cause next response to be misread (socket contamination bug)
+        if (_buffer.isNotEmpty) {
+          print("🧹 [sendCommand] Clearing ${_buffer.length} stale bytes before send");
+          _buffer.clear();
+        }
         socket.add(finalPacket);
         await socket.flush();
         print("📥 Waiting for WiFi response...");
@@ -423,8 +427,8 @@ class CommController extends GetxController {
       connectivity.value = Connectivity.none;
       _connectionStream.add(false);
 
-      /// 🔥 VERY IMPORTANT DELAY
-      await Future.delayed(const Duration(milliseconds: 500));
+      /// Small delay after disconnect
+      await Future.delayed(const Duration(milliseconds: 50));
 
       print("✅ Full disconnect completed");
     } catch (e) {
@@ -514,7 +518,7 @@ class CommController extends GetxController {
   // Each sendCommand creates its own Completer - no shared state race condition
   Completer<Uint8List?>? _responseCompleter;
 
-  Future<Uint8List> _readExactBytes(int length, {int timeoutSec = 15}) async {
+  Future<Uint8List> _readExactBytes(int length, {int timeoutSec = 5}) async {
     final DateTime startTime = DateTime.now();
 
     while (_buffer.length < length) {
@@ -544,7 +548,7 @@ class CommController extends GetxController {
   // When _handleData gets enough bytes, it completes the Completer
   // This is safe for parallel flash - each ECU has its own CommController instance
   Future<Uint8List?> _readDirect(Socket socket,
-      {Duration timeout = const Duration(seconds: 10)}) async {
+      {Duration timeout = const Duration(seconds: 5)}) async {
     // Set up completer for this specific request
     _responseCompleter = Completer<Uint8List?>();
 
@@ -593,21 +597,30 @@ class CommController extends GetxController {
   Future<Uint8List> getWifiResponse() async {
     try {
       if (connectivity.value == Connectivity.wiFi) {
+        int nrc78Count = 0;
+        const int nrc78MaxRetries = 150; // Max 30 × ~500ms = ~15 seconds max wait
         while (true) {
           print("WiFi Communication : ---------INSIDE READ DATA -----------");
 
           // Step 1: Read 2 bytes (Header)
-          Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 15);
+          Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 5);
           if (trgtlen.isEmpty) {
             return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
           }
 
-          // Step 2: Calculate msglen (Matches C# logic)
+          // 🔥 Skip dongle ACK packets (20 01 = dongle status, not ECU data)
+          if (trgtlen[0] == 0x20) {
+            final skip = ((trgtlen[0] & 0x0F) << 8) + trgtlen[1];
+            print("⚡ [getWifiResponse] Skipping dongle ACK 0x20, skip=$skip bytes");
+            if (skip > 0) await _readExactBytes(skip + 3, timeoutSec: 2);
+            continue;
+          }
+
+          // Step 2: Calculate msglen
           int msglen = ((trgtlen[0] & 0x0F) << 8) + trgtlen[1];
 
-          // Step 3: Read remaining body (msglen + 3)
-          // (C# uses msglen + 5 total, we read 2 then msglen + 3)
-          Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 15);
+          // Step 3: Read remaining body
+          Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 5);
           if (remData.isEmpty) {
             return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
           }
@@ -621,15 +634,21 @@ class CommController extends GetxController {
             "WiFi Communication : ---------Response Received = ${bytesToHex(retArray)} -----------",
           );
 
-          // 🔥 THE FIX: NRC 78 Handling (ECU Pending)
-          // If we see 7F [Service] 78, we loop again just like C# "ReadAgain = true"
+          // NRC 78 = ECU Busy/Pending — loop with limit
           if (retArray.length >= 6 &&
               retArray[3] == 0x7F &&
               retArray[5] == 0x78) {
-            print("⚠️ NRC 0x78 Detected: ECU Busy. Reading again...");
+            nrc78Count++;
+            print("⚠️ NRC 0x78 Detected: ECU Busy ($nrc78Count/$nrc78MaxRetries). Reading again...");
+            if (nrc78Count >= nrc78MaxRetries) {
+              print("❌ NRC 0x78 max retries reached — returning timeout");
+              _buffer.clear(); // Clear stale 0x78 packets
+              return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
+            }
             continue;
           }
 
+          nrc78Count = 0; // Reset on non-0x78 response
           return retArray;
         }
       }
@@ -661,7 +680,7 @@ class CommController extends GetxController {
         print("📡 [DEBUG] Standard WiFi Read Started");
 
         // 1. Read Header (2 bytes: Command ID and Status/Length)
-        Uint8List header = await _readExactBytes(2, timeoutSec: 15);
+        Uint8List header = await _readExactBytes(2, timeoutSec: 5);
         if (header.isEmpty) return Uint8List.fromList(utf8.encode("No Resp"));
 
         // 2. Identify the length
@@ -674,7 +693,7 @@ class CommController extends GetxController {
         int remaining = dataLen + 3;
 
         // 3. Read Body
-        Uint8List body = await _readExactBytes(remaining, timeoutSec: 5);
+        Uint8List body = await _readExactBytes(remaining, timeoutSec: 2);
         if (body.isEmpty) return Uint8List.fromList(utf8.encode("No Resp"));
 
         final builder = BytesBuilder();
@@ -800,7 +819,7 @@ class CommController extends GetxController {
 
       // STEP 1: Read exactly 4 bytes for the RP1210 length header
       // This matches: byte[] RetArray = new byte[4];
-      Uint8List header = await _readExactBytes(4, timeoutSec: 10);
+      Uint8List header = await _readExactBytes(4, timeoutSec: 5);
 
       if (header.length < 4) {
         print("WiFi Communication : ! Header Timeout or Connection Closed.");
@@ -825,7 +844,7 @@ class CommController extends GetxController {
       // STEP 3: Read the remaining bytes (msgLen - 4)
       // Matches: readByte = await Stream.ReadAsync(RetArray, 4, RetArray.Length - 4...);
       int remainingLen = msgLen - 4;
-      Uint8List remaining = await _readExactBytes(remainingLen, timeoutSec: 10);
+      Uint8List remaining = await _readExactBytes(remainingLen, timeoutSec: 5);
 
       if (remaining.length < remainingLen) {
         print("WiFi Communication : ! Partial Body Received.");
@@ -908,7 +927,7 @@ class CommController extends GetxController {
 
         // 1. Read the first 2 bytes (Target Length Header)
         // This matches: uint bytesToRead = await dataReader.LoadAsync(2);
-        Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 15);
+        Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 5);
 
         if (trgtlen.isEmpty) {
           return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
@@ -924,7 +943,7 @@ class CommController extends GetxController {
 
         // 3. Read the rest of the response
         // C# reads msglen + 3 more bytes (Data + CRC + Suffix)
-        Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 15);
+        Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 5);
 
         if (remData.isEmpty) {
           return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
@@ -967,7 +986,7 @@ class CommController extends GetxController {
   Future<Uint8List> getRP1210USBResponse() async {
     try {
       // 1. Read Header (4 bytes)
-      Uint8List header = await _readExactBytes(4, timeoutSec: 5);
+      Uint8List header = await _readExactBytes(4, timeoutSec: 2);
       if (header.length < 4) return Uint8List(0);
 
       // 2. Parse Length
@@ -976,7 +995,7 @@ class CommController extends GetxController {
 
       // 3. Read Body
       int bodyLen = msgLen - 4;
-      Uint8List body = await _readExactBytes(bodyLen, timeoutSec: 3);
+      Uint8List body = await _readExactBytes(bodyLen, timeoutSec: 5);
 
       // 🔥 THE FIX: Atomic Concatenation using BytesBuilder
       final builder = BytesBuilder();

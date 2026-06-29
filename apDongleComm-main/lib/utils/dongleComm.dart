@@ -1,6 +1,6 @@
+import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:synchronized/synchronized.dart';
 import 'package:ap_dongle_comm/utils/commController.dart';
 import 'package:ap_dongle_comm/utils/enums/command_ids.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
@@ -12,11 +12,9 @@ import 'package:ap_dongle_comm/utils/model/sessionLogModel.dart';
 import 'package:convert/convert.dart';
 
 class DongleComm {
-  // Global CAN bus lock — serializes CAN frames across all ECUs
-  // static = shared across ALL DongleComm instances
-  // Each send+receive cycle ~5-50ms → both ECUs alternate rapidly → effective parallel
-  // Total time ≈ max(ECU1, ECU2) ~ 6 mins for both
-  static final Lock _canBusLock = Lock();
+
+  // Per-instance lock — each ECU has its own lock, no cross-ECU blocking
+  final Lock _lock = Lock();
 
   CommController? comm;
   bool isChannel;
@@ -411,10 +409,8 @@ class DongleComm {
   }
 
   Future<ResponseArrayStatus> can2xTxRx(int framelength, String txdata) async {
+    return await _lock.synchronized(() async {
     ResponseArrayStatus responseStructure;
-    // Lock ensures only ONE ECU sends/receives at a time
-    // Both ECUs still run in parallel — they just alternate frames ~5-50ms each
-    return await _canBusLock.synchronized(() async {
     try {
       print("------ENTER CAN_TxRx------");
 
@@ -666,7 +662,7 @@ class DongleComm {
       print("[INFO] Semaphore released at ${DateTime.now()}");
       print("------EXIT CAN_TxRx------");
     }
-    }); // end _canBusLock.synchronized
+    }); // end _lock.synchronized
   }
 
   String byteArrayToHex(Uint8List bytes) {

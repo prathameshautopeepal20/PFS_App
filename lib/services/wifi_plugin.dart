@@ -10,12 +10,12 @@ import 'package:ap_diagnostic/models/flashingMtrixModel.dart';
 import 'package:ap_diagnostic/models/readParameterPIDModel.dart';
 import 'package:ap_diagnostic/structure/flash_structures.dart';
 import 'package:ap_diagnostic/usd_diagnostic.dart';
-import 'package:ap_dongle_comm/utils/commController.dart' hide DongleComm;
+import 'package:ap_dongle_comm/utils/commController.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
 
-// ── Per-dongle slot (mirrors .NET client_1 ... client_8) ─────
+// ── Per-dongle slot
 class _Slot {
   CommController ctrl   = CommController();
   DongleComm?    dongle;
@@ -36,21 +36,19 @@ class WiFiPlugin {
 
   // Seed key lock: only ONE ECU can do 2701/2702 at a time on shared CAN bus
   // After seed key, bulk data is safe to run in parallel (different sequence counters)
-
-
-  // ─────────────────────────────────────────────────────────
-  //  initSockets — mirrors .NET InitSocketes()
   //  Creates 8 empty slots (client_1 … client_8)
-  // ─────────────────────────────────────────────────────────
   Future<void> initSockets() async {
     for (int i = 1; i <= 8; i++) _slots[i] = _Slot();
     print('✅ [WiFiPlugin] Sockets initialized (8 slots)');
   }
+  bool _flashInProgress = false;
 
-  // ─────────────────────────────────────────────────────────
-  //  closeSockets — mirrors .NET CloseSockets()
-  // ─────────────────────────────────────────────────────────
   Future<void> closeSockets() async {
+    // 🔥 CRITICAL: Never close sockets while flash is running!
+    if (_flashInProgress) {
+      print('⚠️ closeSockets BLOCKED — flash in progress!');
+      return;
+    }
     for (final s in _slots.values) {
       try { await s.ctrl.disconnect(); } catch (_) {}
       s.ready = false;
@@ -68,8 +66,6 @@ class WiFiPlugin {
       if (slot != null) await slot.ctrl.clearBuffer();
     } catch (_) {}
   }
-
-  //  checkDongle — mirrors .NET CheckClient_N()
   //  Closes existing connection, reconnects, creates DongleComm
   //  TX=7E0 forced (server sends 7DF which ECU ignores)
   // ─────────────────────────────────────────────────────────
@@ -137,7 +133,7 @@ class WiFiPlugin {
     try {
       if (slot.ctrl.isConnected.value) {
         await slot.ctrl.disconnect();
-        await _ms(200);
+        await _ms(50);
       }
       await slot.ctrl.connectWifi(
           host: slot.ip, port: 6888, selectedType: Connectivity.wiFi);
@@ -167,11 +163,11 @@ class WiFiPlugin {
   // ─────────────────────────────────────────────────────────
   Future<void> _setupCAN(_Slot slot) async {
     final d = slot.dongle!;
-    await d.canStopTP();                    await _ms(100);
-    await d.dongleSetProtocol(slot.proto);  await _ms(100);
-    await d.canSetTxHeader(slot.txHeader);  await _ms(100);
-    await d.canSetRxHeaderMask(slot.rxHeader); await _ms(100);
-    await d.canStartPadding('00');          await _ms(100);
+    await d.canStopTP();
+    await d.dongleSetProtocol(slot.proto);
+    await d.canSetTxHeader(slot.txHeader);
+    await d.canSetRxHeaderMask(slot.rxHeader);
+    await d.canStartPadding('00');
   }
 
   // ─────────────────────────────────────────────────────────
@@ -242,17 +238,17 @@ class WiFiPlugin {
       print('🔐 SA...');
       final saR = await slot.dongle!.securityAccess();
       print('   SA: ${_hex(saR)}');
-      await _ms(200);
+      await _ms(50);
 
       // 2-attempt loop (handles ECU stuck in programming session)
       for (int attempt = 1; attempt <= 2; attempt++) {
         await _setupCAN(slot);
         final dsOk = await _diagSession(slot.dongle!, attempt);
-        await _ms(300);
+        await _ms(50);
 
         if (!dsOk && attempt == 1) {
           print('   ⚠️ DiagSession attempt 1 failed → retrying...');
-          await _ms(500);
+          await _ms(100);
           continue;
         }
 
@@ -341,8 +337,6 @@ class WiFiPlugin {
   Future<List<String>> getCVN  (String ip, int i, List p) => _readPid(i, p, pidType: 'CVN');
 
   // ─────────────────────────────────────────────────────────
-  //  startECUFlashing — mirrors .NET StartECUFlashing()
-  //  .NET: CAN_StartTP → FlashInterpreter → CAN_StopTP
   //  Both BATCH and INDIVIDUAL use this same method
   //  Auto-reconnect if dongle drops mid-flash
   // ─────────────────────────────────────────────────────────
@@ -358,6 +352,7 @@ class WiFiPlugin {
     required Function(double) onProgress,
     required Function(String) onStatus,
   }) async {
+    _flashInProgress = true;
     try {
       var slot = _slots[index];
       if (slot == null || !slot.ready || slot.diag == null) {
@@ -368,8 +363,8 @@ class WiFiPlugin {
         slot = _slots[index]!;
       }
 
-      // Convert SREC → FlashingMatrixData (mirrors .NET ConvertToJson)
-      print('🔄 Converting SREC[$index]: \${hexFileContent.length} chars');
+      // Convert SREC → FlashingMatrixData 
+      print('🔄 Converting SREC[$index]: ${hexFileContent.length} chars');
       final jsonData = _srecToFlashingMatrixData(seqFileContent, hexFileContent);
       if (jsonData == null || (jsonData.noOfSectors ?? 0) == 0) {
         return 'ERROR: SREC conversion failed';
@@ -384,9 +379,8 @@ class WiFiPlugin {
       // .NET: await dongleCommWin.CAN_StartTP(ecu_index)
       print('▶️  CAN_StartTP[$index]...');
       await slot.dongle!.canStartTP();
-      await _ms(200);
 
-      // .NET: response = await dSDiagnostic.FlashInterpreter(...)
+      
       // SEED KEY LOCK: only ONE ECU does 2701/2702 at a time on shared CAN bus
       // After seed key (~1-2 sec), lock releases so next ECU can do its seed key
       // Bulk data (sendbulkdata) runs in parallel after all seed keys complete
@@ -418,7 +412,7 @@ class WiFiPlugin {
         print('⚠️  CAN_StopTP[$index] failed (dongle may have disconnected): $e');
       }
 
-      // .NET treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
+    
       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
         print('   ✅ FLASH SUCCESS[$index]!');
         return 'NOERROR';
@@ -431,9 +425,13 @@ class WiFiPlugin {
     }
   }
 
+  void setFlashInProgress(bool value) {
+    _flashInProgress = value;
+    print('🔒 _flashInProgress = $value');
+  }
+
   // ─────────────────────────────────────────────────────────
   //  SREC → FlashingMatrixData
-  //  Mirrors .NET GetJson.ConvertToJson()
   // ─────────────────────────────────────────────────────────
   FlashingMatrixData? _srecToFlashingMatrixData(
       String seqFile, String srecFile) {
@@ -474,12 +472,12 @@ class WiFiPlugin {
         }
       }
       print('  SREC parsed: ${addrMap.length} bytes');
-      if (addrMap.isEmpty) return null;
 
       final sectors = <FlashingMatrix>[];
 
       if (ranges.isEmpty) {
         // Auto-detect: gap > 256 bytes = new sector
+        if (addrMap.isEmpty) return null;
         final sorted = addrMap.keys.toList()..sort();
         var secStart = sorted.first;
         var prev     = sorted.first;
@@ -503,7 +501,26 @@ class WiFiPlugin {
         }
       }
 
-      print('  Sectors: ${sectors.length}');
+   
+      int maxRefIndex = 0;
+      for (final raw in seqFile.split('\n')) {
+        final matches = RegExp(r'(?:json_strt_addr|json_end_addr|ecu_memmap_strt_addr|ecu_memmap_end_addr)(\d+)').allMatches(raw);
+        for (final m in matches) {
+          final idx = int.tryParse(m.group(1) ?? '0') ?? 0;
+          if (idx > maxRefIndex) maxRefIndex = idx;
+        }
+      }
+      while (sectors.length <= maxRefIndex) {
+        // Add dummy sector with same address as last sector (FF data)
+        final last = sectors.isNotEmpty ? sectors.last : _makeSector(0, 0, 'FF');
+        sectors.add(_makeSector(
+          int.parse(last.jsonStartAddress!, radix: 16),
+          int.parse(last.jsonEndAddress!, radix: 16),
+          last.jsonData ?? 'FF',
+        ));
+        print('  Added dummy sector ${sectors.length - 1} to match seq file references');
+      }
+      print('  Sectors: ${sectors.length} (maxRef=$maxRefIndex)');
       return FlashingMatrixData(noOfSectors: sectors.length, sectorData: sectors);
     } catch (e) {
       print('❌ _srecToFlashingMatrixData: $e');
@@ -534,10 +551,7 @@ class _AddrRange {
   _AddrRange(this.start, this.end);
 }
 
-// ── Top-level function for compute() isolate ──────────────────────────────
-// Must be top-level (not class method) for compute() to work.
-// Takes [seqFileContent, hexFileContent] as a list argument.
-// This runs in a separate OS thread via Flutter's compute() — true parallel!
+
 FlashingMatrixData? _srecToFlashingMatrixDataIsolate(List<String> args) {
   final seqFile  = args[0];
   final srecFile = args[1];
