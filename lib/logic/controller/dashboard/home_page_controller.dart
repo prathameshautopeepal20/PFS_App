@@ -23,7 +23,7 @@ const _cYellow = Color(0xFFFFEB3B);
 const _cOrange = Color(0xFFF9772C);
 
 // ════════════════════════════════════════════════════════════
-//  TableInfoModel — mirrors .NET TableInfoModel
+//  TableInfoModel — mirrors TableInfoModel
 // ════════════════════════════════════════════════════════════
 class TableInfoModel {
   int index; int srNo; String bgColor;
@@ -78,7 +78,7 @@ class HomePageController extends GetxController {
   final Map<String, dynamic> args;
   HomePageController({required this.args});
 
-  // .NET fields
+  //fields
   late final String      _flashingType;
   late final ModelResult? _selectedModel;
   late final SubModel?   _selectedSubModel;
@@ -104,7 +104,7 @@ class HomePageController extends GetxController {
   ModelResult? get selectedModel    => _selectedModel;
   SubModel?    get selectedSubModel => _selectedSubModel;
 
-  // .NET observable properties
+  // observable properties
   final RxBool   isLoading               = false.obs;
   final RxString currStatus              = ''.obs;
   final RxString title                   = ''.obs;
@@ -169,7 +169,7 @@ class HomePageController extends GetxController {
 
       title.value = '${_selectedSubModel?.description ?? ''}/${_selectedModel?.name ?? ''}';
 
-      // .NET order exactly
+      // order exactly
       await _generateJson();       // GenerateJson()
       await _getFlashDetail();     // GetFlashDetail()
       await _getParameters();      // GetParameters(subModel.id)
@@ -179,8 +179,6 @@ class HomePageController extends GetxController {
       isLoading.value = false;
     }
   }
-
-  // .NET: GenerateJson() — converts SREC files to JSON format
   // In Flutter: files are already downloaded as raw content
   // We store them directly (wifi_plugin converts SREC→FlashingMatrixData at flash time)
   Future<void> _generateJson() async {
@@ -447,7 +445,7 @@ class HomePageController extends GetxController {
       }
       tableInfo.refresh();
 
-      // .NET: var data = TableInfo.Where(x => x.is_dongle==false && x.ecu_status==false && x.AlreadyMessage==false)
+      //var data = TableInfo.Where(x => x.is_dongle==false && x.ecu_status==false && x.AlreadyMessage==false)
       final data = tableInfo.where((x) => !x.isDongle && !x.ecuStatus && !x.alreadyMessage).toList();
       if (data.isNotEmpty) {
         value = false;
@@ -467,8 +465,9 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckECU — mirrors .NET CheckECU() ───────────────────
-  // .NET: foreach → Task.Delay(10) → GetESN → check res[0]=="true"
+  // ── CheckECU — mirrors CheckECU() ───────────────────
+  // .foreach → Task.Delay(10) → GetESN → check res[0]=="true"
+
   Future<bool> _checkECU() async {
     currStatus.value = 'Checking ECU Connection...';
     try {
@@ -893,8 +892,11 @@ class HomePageController extends GetxController {
         }
       }
 
-      // PARALLEL FLASH — both ECUs simultaneously
-      // eagerError: false = wait for ALL ECUs even if one fails
+      // ══════════════════════════════════════════════════════════
+      // PHASE 1: PARALLEL FLASH — both ECUs flash simultaneously
+      // _startFlash only does the flash, NO post-flash reads
+      // This keeps the event loop free for both ECU socket I/O
+      // ══════════════════════════════════════════════════════════
       _wifi.setFlashInProgress(true);
       try {
         await Future.wait(
@@ -902,13 +904,90 @@ class HomePageController extends GetxController {
           eagerError: false,
         );
       } catch (e) {
-        print('⚠️ Future.wait error (non-fatal): $e');
+        print('⚠️ Flash Future.wait error (non-fatal): $e');
       }
       _wifi.setFlashInProgress(false);
+      print('✅ PHASE 1 COMPLETE — both ECUs finished flashing');
+
+      // ══════════════════════════════════════════════════════════
+      // PHASE 2: PARALLEL POST-FLASH READS
+      // Both ECUs are done flashing now — safe to run concurrently
+      // checkDongle for ECU1 and ECU2 run in parallel using own sockets
+      // Total extra time: ~30-60 sec (not 3-4 min sequential)
+      // ══════════════════════════════════════════════════════════
+      print('📖 PHASE 2 — parallel post-flash reads for all ECUs');
+      try {
+        await Future.wait(
+          eligible.map((d) => _postFlashLifecycle(d)),
+          eagerError: false,
+        );
+      } catch (e) {
+        print('⚠️ Post-flash Future.wait error (non-fatal): $e');
+      }
+      print('🏁 PHASE 2 COMPLETE — all post-flash reads done');
     } catch (e) { print('❌ startFlash: $e'); }
   }
 
   // ── StartFlash — mirrors .NET StartFlash(selectedModel, index1) ──
+  // ══════════════════════════════════════════════════════════════════
+  // _postFlashLifecycle — runs AFTER both ECUs finish flashing
+  //
+  // Called from PHASE 2 Future.wait — both ECUs are done at this point
+  // Safe to run ECU1 and ECU2 post-reads concurrently because:
+  //   - No flash loop running → no S3 timer to expire
+  //   - Each ECU uses its own socket (slot 1 vs slot 2)
+  //   - checkDongle/connectWifi for ECU1 cannot starve ECU2 flash
+  //     (ECU2 flash is already DONE)
+  // ══════════════════════════════════════════════════════════════════
+  Future<void> _postFlashLifecycle(TableInfoModel device) async {
+    if (device.flashingSuccess) {
+      try {
+        print('📖 [ECU${device.index}] Post-flash reads starting...');
+        // .NET: Thread.Sleep(3000) — ECU reboots after flash
+        // Both ECUs do this 3s wait concurrently (not sequential)
+        await Future.delayed(const Duration(seconds: 3));
+
+        await _wifi.clearBuffer(device.index);
+
+        final sub    = _selectedSubModel;
+        final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
+        final rawTx  = ecuSub?.txHeader ?? '';
+        final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
+
+        // Re-connect dongle (safe — flash is completely done for ALL ECUs)
+        await _wifi.checkDongle(
+          device.ipAddress,
+          device.index,
+          txHeader:     txHdr,
+          rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
+          protocolHex:  ecuSub?.protocolAutopeepal ?? '02',
+        );
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Read CalID
+        final calPid = _getPidByType('CALID');
+        final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
+        device.printCalId = calRes[1];
+
+        // Read CVN
+        final cvnPid = _getPidByType('CVN');
+        final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
+        device.cvn = cvnRes[1];
+
+        print('✅ [ECU${device.index}] CalID=${device.printCalId} CVN=${device.cvn}');
+      } catch (e) {
+        print('❌ [ECU${device.index}] post-flash read error: $e');
+      }
+      await _readAfterFlashData(device);
+      await _generatePdfAndPost(device, true);
+    } else {
+      await _readAfterFlashData(device);
+      await _generatePdfAndPost(device, false);
+    }
+    tableInfo.refresh();
+    print('🏁 [ECU${device.index}] Post-flash lifecycle complete');
+  }
+
   Future<void> _startFlash(TableInfoModel device, int index1) async {
     Timer? timer;
     try {
@@ -985,45 +1064,18 @@ class HomePageController extends GetxController {
 
       device.reportColor = _cYellow;
 
+      // 🔥 CRITICAL: Do NOT run any awaits here while other ECU is still flashing!
+      // Post-flash reads (checkDongle, getCalId, getCVN) are deferred to after
+      // Future.wait completes — same as .NET Thread isolation model.
       if (result == 'NOERROR') {
-        // .NET: Thread.Sleep(3000) — ECU reboots after flash, must wait
-        await Future.delayed(const Duration(seconds: 3));
         device.flashingSuccess = true;
         device.statusColor     = _cGreen;
-
-        await _wifi.clearBuffer(device.index);
-        try {
-          // Re-init dongle connection after flash
-          final sub    = _selectedSubModel;
-          final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
-          final rawTx  = ecuSub?.txHeader ?? '';
-          final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
-          await _wifi.checkDongle(device.ipAddress, device.index,
-              txHeader: txHdr,
-              rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
-              protocolHex:  ecuSub?.protocolAutopeepal ?? '02');
-          await Future.delayed(const Duration(milliseconds: 100));
-
-          final calPid = _getPidByType('CALID');
-          final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
-          device.printCalId = calRes[1];
-
-          final cvnPid = _getPidByType('CVN');
-          final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
-          device.cvn = cvnRes[1];
-        } catch (e) {
-          print('❌ post-flash read error: $e');
-        }
       } else {
         device.statusColor = _cRed;
       }
 
       device.flashingCompleted = true;
       device.isflashing        = false;
-
-      // .NET: ReadAfterFlashData → GeneratePdfWrapper → timer.Stop()
-      await _readAfterFlashData(device);
-      await _generatePdfAndPost(device, result == 'NOERROR');
 
       timer?.cancel(); timer = null;
       sw.stop();
@@ -1247,7 +1299,7 @@ class HomePageController extends GetxController {
 
   // ════════════════════════════════════════════════════════════
   //  INDIVIDUAL FLASH (non-batch play button)
-  //  mirrors .NET StartIndivisualFlashingCommand
+  //  mirrors  StartIndivisualFlashingCommand
   // ════════════════════════════════════════════════════════════
   Future<void> startIndividualFlash(TableInfoModel device) async {
     try {

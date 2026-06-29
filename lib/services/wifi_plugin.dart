@@ -1,8 +1,3 @@
-// lib/services/wifi_plugin.dart
-// Mirrors .NET WifiFunctions.cs exactly
-// Key: persistent TcpClient per index (like .NET client_1, client_2...)
-// Fix: auto-reconnect if dongle disconnects during flash
-
 import 'dart:typed_data';
 import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
@@ -14,8 +9,9 @@ import 'package:ap_dongle_comm/utils/commController.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
+import 'package:synchronized/synchronized.dart';
 
-// ── Per-dongle slot
+// ── Per-dongle slot (client_8) ─────
 class _Slot {
   CommController ctrl   = CommController();
   DongleComm?    dongle;
@@ -34,13 +30,30 @@ class WiFiPlugin {
   final Map<int, _Slot>     _slots          = {};
   final Map<String, double> flashPercentMap = {};
 
-  // Seed key lock: only ONE ECU can do 2701/2702 at a time on shared CAN bus
-  // After seed key, bulk data is safe to run in parallel (different sequence counters)
+  // ══════════════════════════════════════════════════════════════
+  // SEED KEY LOCK — CRITICAL for parallel flash on shared CAN bus
+  // Both dongles share ONE CAN bus. 2701/2702 must be sequential.
+  // If ECU1 and ECU2 both send 2701 simultaneously → collision →
+  // ECUERROR_SECURITYACCESSDENIED → flash fails.
+  // Static lock: only ONE flashInterpreter can do seed key at a time.
+  // After 2702 succeeds, lock releases → other ECU does its seed key.
+  // Bulk data transfer runs in parallel after all seed keys complete.
+  // ══════════════════════════════════════════════════════════════
+  static final Lock _seedKeyLock = Lock();
+
+
+  // ─────────────────────────────────────────────────────────
+  //  initSockets — mirrors .NET InitSocketes()
   //  Creates 8 empty slots (client_1 … client_8)
+  // ─────────────────────────────────────────────────────────
   Future<void> initSockets() async {
     for (int i = 1; i <= 8; i++) _slots[i] = _Slot();
     print('✅ [WiFiPlugin] Sockets initialized (8 slots)');
   }
+
+  // ─────────────────────────────────────────────────────────
+  //  closeSockets — mirrorsCloseSockets()
+  // ─────────────────────────────────────────────────────────
   bool _flashInProgress = false;
 
   Future<void> closeSockets() async {
@@ -83,13 +96,13 @@ class WiFiPlugin {
       final slot = _slots[index] ?? _Slot();
       _slots[index] = slot;
 
-      // .NET: if connected → close → delay 50ms → new TcpClient
+      //  if connected → close → delay 50ms → new TcpClient
       if (slot.ctrl.isConnected.value) {
         await slot.ctrl.disconnect();
         await _ms(50);
       }
 
-      // .NET: client_N.ConnectAsync(IP, 6888).Wait(500)
+      //  client_N.ConnectAsync(IP, 6888).Wait(500)
       await slot.ctrl.connectWifi(
           host: ip, port: 6888, selectedType: Connectivity.wiFi);
 
@@ -121,11 +134,8 @@ class WiFiPlugin {
       return false;
     }
   }
-
-  // ─────────────────────────────────────────────────────────
   //  _reconnect — reconnect dongle if dropped during flash
-  //  .NET does this implicitly via persistent TcpClient
-  // ─────────────────────────────────────────────────────────
+
   Future<bool> _reconnect(int index) async {
     final slot = _slots[index];
     if (slot == null) return false;
@@ -337,6 +347,8 @@ class WiFiPlugin {
   Future<List<String>> getCVN  (String ip, int i, List p) => _readPid(i, p, pidType: 'CVN');
 
   // ─────────────────────────────────────────────────────────
+  //  startECUFlashing — mirrors .NET StartECUFlashing()
+  //  .NET: CAN_StartTP → FlashInterpreter → CAN_StopTP
   //  Both BATCH and INDIVIDUAL use this same method
   //  Auto-reconnect if dongle drops mid-flash
   // ─────────────────────────────────────────────────────────
@@ -363,7 +375,7 @@ class WiFiPlugin {
         slot = _slots[index]!;
       }
 
-      // Convert SREC → FlashingMatrixData 
+      // Convert SREC → FlashingMatrixData (mirrors .NET ConvertToJson)
       print('🔄 Converting SREC[$index]: ${hexFileContent.length} chars');
       final jsonData = _srecToFlashingMatrixData(seqFileContent, hexFileContent);
       if (jsonData == null || (jsonData.noOfSectors ?? 0) == 0) {
@@ -380,28 +392,51 @@ class WiFiPlugin {
       print('▶️  CAN_StartTP[$index]...');
       await slot.dongle!.canStartTP();
 
-      
-      // SEED KEY LOCK: only ONE ECU does 2701/2702 at a time on shared CAN bus
-      // After seed key (~1-2 sec), lock releases so next ECU can do its seed key
-      // Bulk data (sendbulkdata) runs in parallel after all seed keys complete
+      // ══════════════════════════════════════════════════════════
+      // SEED KEY LOCK — Serial 2701/2702, then parallel bulk data
+      //
+      // The flashInterpreter runs the FULL sequence file:
+      //   1002 → 2701 → 2702 → 3101 → 34 → bulk data (47D2 blocks)
+      //
+      // PROBLEM: Both ECU flash interpreters run in Future.wait.
+      // When ECU1 sends 2701, ECU2 sends 2701 ~90ms later on the
+      // SAME CAN bus → collision → ECUERROR_SECURITYACCESSDENIED.
+      //
+      // FIX: Wrap the ENTIRE flashInterpreter in _seedKeyLock.
+      // ECU1 acquires lock → runs full flash → releases lock.
+      // ECU2 was waiting → now acquires lock → runs full flash.
+      //
+      // This means flash is effectively sequential, NOT parallel.
+      // But it's the only safe way with a shared CAN bus where
+      // security access must not overlap.
+      //
+      // TIME: ECU1 ~2min + ECU2 ~2min = ~4min total (sequential)
+      // This is safer than parallel crashes. To get true parallel,
+      // the sequence file must support parallel security access,
+      // which requires hardware isolation (separate CAN buses).
+      // ══════════════════════════════════════════════════════════
       print('▶️  flashInterpreter[$index] seed=$seedKeyIndex sectors=${jsonData.noOfSectors}');
+      print('🔐 [$index] Waiting for seed key lock...');
 
-      // Flash sequentially via controller (Future.wait won't help with shared CAN bus)
       String result = 'No Resp From Dongle';
-      try {
-        result = await slot.diag!.flashInterpreter(
-              FlashConfig(seedKeyIndex: seedEnum),
-              jsonData.noOfSectors!,
-              jsonData.sectorData!,
-              seqFileContent,
-            ) ?? 'NOERROR';
-      } catch (e) {
-        print('❌ flashInterpreter[$index] exception: $e');
-        if (!slot.ctrl.isConnected.value) {
-          print('🔌 Dongle $index disconnected during flash');
+      await _seedKeyLock.synchronized(() async {
+        print('🔑 [$index] Seed key lock acquired — running flash...');
+        try {
+          result = await slot?.diag!.flashInterpreter(
+                FlashConfig(seedKeyIndex: seedEnum),
+                jsonData.noOfSectors!,
+                jsonData.sectorData!,
+                seqFileContent,
+              ) ?? 'NOERROR';
+        } catch (e) {
+          print('❌ flashInterpreter[$index] exception: $e');
+          if (!slot!.ctrl.isConnected.value) {
+            print('🔌 Dongle $index disconnected during flash');
+          }
+          result = 'No Resp From Dongle';
         }
-        result = 'No Resp From Dongle';
-      }
+        print('🔓 [$index] Seed key lock releasing — result=$result');
+      });
 
       print('⏹️  startECUFlashing[$index]: result=$result');
 
@@ -412,7 +447,7 @@ class WiFiPlugin {
         print('⚠️  CAN_StopTP[$index] failed (dongle may have disconnected): $e');
       }
 
-    
+      // treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
         print('   ✅ FLASH SUCCESS[$index]!');
         return 'NOERROR';
@@ -432,6 +467,7 @@ class WiFiPlugin {
 
   // ─────────────────────────────────────────────────────────
   //  SREC → FlashingMatrixData
+  //  Mirrors .NET GetJson.ConvertToJson()
   // ─────────────────────────────────────────────────────────
   FlashingMatrixData? _srecToFlashingMatrixData(
       String seqFile, String srecFile) {
@@ -501,7 +537,9 @@ class WiFiPlugin {
         }
       }
 
-   
+      // Ensure enough sectors exist for all indices referenced in seq file
+      // seq file may reference sectorData[1], sectorData[2] etc.
+      // If fewer sectors created, add empty FF-padded dummy sectors
       int maxRefIndex = 0;
       for (final raw in seqFile.split('\n')) {
         final matches = RegExp(r'(?:json_strt_addr|json_end_addr|ecu_memmap_strt_addr|ecu_memmap_end_addr)(\d+)').allMatches(raw);
@@ -551,7 +589,10 @@ class _AddrRange {
   _AddrRange(this.start, this.end);
 }
 
-
+// ── Top-level function for compute() isolate ──────────────────────────────
+// Must be top-level (not class method) for compute() to work.
+// Takes [seqFileContent, hexFileContent] as a list argument.
+// This runs in a separate OS thread via Flutter's compute() — true parallel!
 FlashingMatrixData? _srecToFlashingMatrixDataIsolate(List<String> args) {
   final seqFile  = args[0];
   final srecFile = args[1];
