@@ -23,7 +23,7 @@ const _cYellow = Color(0xFFFFEB3B);
 const _cOrange = Color(0xFFF9772C);
 
 // ════════════════════════════════════════════════════════════
-//  TableInfoModel — mirrors TableInfoModel
+//  TableInfoModel — mirrors .NET TableInfoModel
 // ════════════════════════════════════════════════════════════
 class TableInfoModel {
   int index; int srNo; String bgColor;
@@ -36,6 +36,9 @@ class TableInfoModel {
   String calIdBefore; String calId; String printCalId;
   String cvnBefore; String cvn; String swPartNo;
   bool flashingCompleted; bool flashingSuccess; bool isflashing;
+  // Timer objects passed from _startFlash → _postFlashLifecycle
+  Stopwatch? flashStopwatch;
+  Timer?     flashTimer_obj;
   bool flashingAvailabel; String fileType;
   String flashTimer; String flashPercent; double progress;
   bool isProgressVisible; Color statusColor; Color reportColor;
@@ -78,7 +81,7 @@ class HomePageController extends GetxController {
   final Map<String, dynamic> args;
   HomePageController({required this.args});
 
-  //fields
+  // .NET fields
   late final String      _flashingType;
   late final ModelResult? _selectedModel;
   late final SubModel?   _selectedSubModel;
@@ -104,7 +107,7 @@ class HomePageController extends GetxController {
   ModelResult? get selectedModel    => _selectedModel;
   SubModel?    get selectedSubModel => _selectedSubModel;
 
-  // observable properties
+  // .NET observable properties
   final RxBool   isLoading               = false.obs;
   final RxString currStatus              = ''.obs;
   final RxString title                   = ''.obs;
@@ -169,7 +172,7 @@ class HomePageController extends GetxController {
 
       title.value = '${_selectedSubModel?.description ?? ''}/${_selectedModel?.name ?? ''}';
 
-      // order exactly
+      // .NET order exactly
       await _generateJson();       // GenerateJson()
       await _getFlashDetail();     // GetFlashDetail()
       await _getParameters();      // GetParameters(subModel.id)
@@ -179,6 +182,8 @@ class HomePageController extends GetxController {
       isLoading.value = false;
     }
   }
+
+  // .NET: GenerateJson() — converts SREC files to JSON format
   // In Flutter: files are already downloaded as raw content
   // We store them directly (wifi_plugin converts SREC→FlashingMatrixData at flash time)
   Future<void> _generateJson() async {
@@ -445,7 +450,7 @@ class HomePageController extends GetxController {
       }
       tableInfo.refresh();
 
-      //var data = TableInfo.Where(x => x.is_dongle==false && x.ecu_status==false && x.AlreadyMessage==false)
+      // .NET: var data = TableInfo.Where(x => x.is_dongle==false && x.ecu_status==false && x.AlreadyMessage==false)
       final data = tableInfo.where((x) => !x.isDongle && !x.ecuStatus && !x.alreadyMessage).toList();
       if (data.isNotEmpty) {
         value = false;
@@ -465,9 +470,8 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckECU — mirrors CheckECU() ───────────────────
-  // .foreach → Task.Delay(10) → GetESN → check res[0]=="true"
-
+  // ── CheckECU — mirrors .NET CheckECU() ───────────────────
+  // .NET: foreach → Task.Delay(10) → GetESN → check res[0]=="true"
   Future<bool> _checkECU() async {
     currStatus.value = 'Checking ECU Connection...';
     try {
@@ -878,19 +882,9 @@ class HomePageController extends GetxController {
       // Each ECU then uses its own socket/buffer/Completer - no interference
       final eligible = tableInfo.where((d) => d.isEcuAvailable).toList();
 
-      // Pre-fetch sequentially to avoid socket race condition
-      for (final d in eligible) {
-        if (d.calIdBefore.isEmpty) {
-          final pid = _getPidByType('CALID');
-          final res = await _wifi.getCalId(d.ipAddress, d.index, pid);
-          d.calIdBefore = res[1];
-        }
-        if (d.cvnBefore.isEmpty) {
-          final pid = _getPidByType('CVN');
-          final res = await _wifi.getCVN(d.ipAddress, d.index, pid);
-          d.cvnBefore = res[1];
-        }
-      }
+      // Pre-flash reads removed — .NET does NOT pre-fetch before flash
+      // CalID/CVN "Before" values come from checkEcuStatus which runs on page load
+      // This eliminates the delay between button click and flash start
 
       // ══════════════════════════════════════════════════════════
       // PHASE 1: PARALLEL FLASH — both ECUs flash simultaneously
@@ -984,8 +978,14 @@ class HomePageController extends GetxController {
       await _readAfterFlashData(device);
       await _generatePdfAndPost(device, false);
     }
+    // .NET: timer.Stop() + stopWatch.Stop() AFTER ReadAfterFlashData
+    device.flashTimer_obj?.cancel();
+    device.flashTimer_obj = null;
+    device.flashStopwatch?.stop();
+    device.flashStopwatch = null;
+
     tableInfo.refresh();
-    print('🏁 [ECU${device.index}] Post-flash lifecycle complete');
+    print('🏁 [ECU${device.index}] Post-flash lifecycle complete — timer stopped');
   }
 
   Future<void> _startFlash(TableInfoModel device, int index1) async {
@@ -1077,17 +1077,20 @@ class HomePageController extends GetxController {
       device.flashingCompleted = true;
       device.isflashing        = false;
 
-      timer?.cancel(); timer = null;
-      sw.stop();
-
-      // .NET: status text + FlashPercent + Progress
-      device.status      = result == 'NOERROR' ? 'Flashing completed' : result;
+      // .NET: status text + FlashPercent shown at 100% immediately
+      // Timer keeps running during post-flash reads (stopped in _postFlashLifecycle)
+      device.status       = result == 'NOERROR' ? 'Flashing completed' : result;
       device.flashPercent = result == 'NOERROR' ? '100.0%' : device.flashPercent;
       if (device.status == 'Flashing completed') {
         device.flashPercent = '100.0%';
         device.progress     = 1.0;
       }
       tableInfo.refresh();
+
+      // Store timer+stopwatch on device so _postFlashLifecycle can stop them
+      device.flashStopwatch = sw;
+      device.flashTimer_obj = timer;
+      timer = null; // prevent finally block from cancelling
 
       _onAllComplete();
     } catch (e) {
@@ -1299,7 +1302,7 @@ class HomePageController extends GetxController {
 
   // ════════════════════════════════════════════════════════════
   //  INDIVIDUAL FLASH (non-batch play button)
-  //  mirrors  StartIndivisualFlashingCommand
+  //  mirrors .NET StartIndivisualFlashingCommand
   // ════════════════════════════════════════════════════════════
   Future<void> startIndividualFlash(TableInfoModel device) async {
     try {

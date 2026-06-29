@@ -26,6 +26,8 @@ class UDSDiagnostic {
   final ECUCalculateSeedkey _calculateSeedKey;
   UDSDiagnostic(this._dongleComm, this._calculateSeedKey);
 
+
+
   Future<ResponseArrayStatus?> enterExtendedSession(
     WriteParameterIndex writeParameterIndex,
     SEEDKEYINDEXTYPE seedKeyIndex,
@@ -2128,12 +2130,17 @@ class UDSDiagnostic {
   //   // Equivalent to List<LoopModel> loopModelList = new List<LoopModel>();
   List<LoopModel> loopModelList = [];
 
+  // ── flashInterpreter with seed-key lock release callback ────────
+  // onBulkDataStart: called the moment "sendbulkdata" first runs.
+  // wifi_plugin uses this to release _seedKeyLock EARLY so the
+  // next ECU can run its seed key while this ECU does bulk transfer.
   Future<String?> flashInterpreter(
     FlashConfig flashConfigData,
     int noOfSectors,
     List<FlashingMatrix> sectorData,
-    String interpreterFile,
-  ) async {
+    String interpreterFile, {
+    void Function()? onBulkDataStart,
+  }) async {
     realTimeBytesFlashed = 0;
     totalBytesToBeFlashed = 0;
 
@@ -2734,6 +2741,12 @@ class UDSDiagnostic {
         //   );
         // }
         else if (command == "sendbulkdata") {
+          // 🔓 RELEASE SEED KEY LOCK — bulk data starts here
+          // Other ECU can now start its seed key sequence
+          if (onBulkDataStart != null) {
+            onBulkDataStart();
+            onBulkDataStart = null; // call only once
+          }
           List<String> splitInfo = info.split(',');
           int blkSeqCnt = int.parse(splitInfo[1]);
           int ind2 = info.indexOf(',', info.indexOf(',') + 1);
@@ -2764,6 +2777,17 @@ class UDSDiagnostic {
             int chunkLen = (sectorNumBytes - offset) < sectorFrameTransferLen
                 ? (sectorNumBytes - offset)
                 : sectorFrameTransferLen;
+
+            // 🔥 Skip all-0xFF blocks — ECU rejects blank (erased) data blocks
+            // .NET does the same — only send blocks with actual firmware data
+            final chunk = sectorDataArray.sublist(offset, offset + chunkLen);
+            final allFF = chunk.every((b) => b == 0xFF);
+            if (allFF) {
+              print('⚡ Skipping all-0xFF block at offset $offset (blank sector)');
+              offset += chunkLen;
+              blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
+              continue;
+            }
 
             BytesBuilder frameBuilder = BytesBuilder(copy: false);
             for (var item in transferSplitData) {

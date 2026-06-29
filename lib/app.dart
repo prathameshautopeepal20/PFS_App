@@ -248,50 +248,58 @@ import 'package:flutter/services.dart';
 import 'package:get/get_navigation/src/root/get_material_app.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:window_manager/window_manager.dart';
-// ignore: unused_import
 import 'package:atpl_flashing_app/services/log_file.dart';
+
+// ── Window lifecycle — keeps app alive when minimised during flash ────────────
+class _AppWindowListener extends WindowListener {
+  @override
+  void onWindowClose() async {
+    // Allow normal close — flash runs in Dart async, not a separate process
+    // If you want to block close during flash, check isFlashing flag here
+    await windowManager.destroy();
+  }
+}
 
 class App {
   static App instance = App();
 
-  // Only use platform channel on mobile
   static const MethodChannel platform = MethodChannel(
     'atpl_flashing_app/native',
   );
 
-  final String _appName = 'ATPM PGS';
-  static String jwtToken = '';
-  static String connectedVia = '';
-  static int oemId = 0;
-  static int subModelId = 0;
+  final String _appName = 'ATPL PFS';
+  static String jwtToken        = '';
+  static String connectedVia    = '';
+  static int    oemId           = 0;
+  static int    subModelId      = 0;
   static String firmwareVersion = '';
-  static String sessionId = '';
-  static String currentUserId = '';
+  static String sessionId       = '';
+  static String currentUserId   = '';
 
-  bool? _devMode;
-  bool? _appLog;
-  bool? _apiLog;
+  bool?   _devMode;
+  bool?   _appLog;
+  bool?   _apiLog;
   String? _baseURLType;
-  bool? _setDefault;
-  bool? _samplePayment;
+  bool?   _setDefault;
+  bool?   _samplePayment;
 
   static const String countryCode = "INDIA";
 
-  String get appName => _appName;
-  bool get devMode => _devMode ?? false;
-  bool get appLog => _appLog ?? false;
-  bool get apiLog => _apiLog ?? false;
-  bool get setDefault => _setDefault ?? false;
+  String get appName     => _appName;
+  bool   get devMode     => _devMode     ?? false;
+  bool   get appLog      => _appLog      ?? false;
+  bool   get apiLog      => _apiLog      ?? false;
+  bool   get setDefault  => _setDefault  ?? false;
   String get baseURLType => _baseURLType ?? AtomURLType.DEV;
-  bool get samplePayment => _samplePayment ?? true;
-  bool get isProd => _baseURLType == AtomURLType.DEV;
+  bool   get samplePayment => _samplePayment ?? true;
+  bool   get isProd      => _baseURLType == AtomURLType.DEV;
 
   void initAndRunApp({
-    required bool appLog,
-    required bool apiLog,
-    required bool devMode,
-    required bool setDefault,
-    required bool samplePayment,
+    required bool   appLog,
+    required bool   apiLog,
+    required bool   devMode,
+    required bool   setDefault,
+    required bool   samplePayment,
     required String baseURLType,
   }) {
     runZonedGuarded(
@@ -299,54 +307,54 @@ class App {
         WidgetsFlutterBinding.ensureInitialized();
         print('✅ Step 1: WidgetsFlutterBinding initialized');
 
-        // ── Desktop window setup ──────────────────────────────
+        // ── Desktop window setup ──────────────────────────────────
         if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
           await windowManager.ensureInitialized();
           print('✅ Step 2: WindowManager initialized');
 
+          // Add listener so app keeps running on minimize
+          windowManager.addListener(_AppWindowListener());
+
           const WindowOptions windowOptions = WindowOptions(
-            center: true,
-            title: "ATPL PFS ",
+            center:       true,
+            title:        "ATPL PFS",
             titleBarStyle: TitleBarStyle.normal,
-            size: Size(1280, 720),
-            minimumSize: Size(800, 600),
+            size:         Size(1280, 720),
+            minimumSize:  Size(800, 600),
+            // skipTaskbar: false ensures app stays in taskbar when minimised
+            skipTaskbar:  false,
           );
 
           await windowManager.waitUntilReadyToShow(windowOptions, () async {
             await windowManager.maximize();
             await windowManager.show();
             await windowManager.focus();
+            // Ensure window is NOT always-on-top (allows minimise freely)
+            await windowManager.setAlwaysOnTop(false);
           });
           print('✅ Step 3: Window shown and maximized');
         }
 
-        // ── GetStorage ────────────────────────────────────────
-        // await GetStorage.init();
-        // print('✅ Step 4: GetStorage initialized');
-
-        // ── GetStorage ────────────────────────────────────────
+        // ── GetStorage ────────────────────────────────────────────
         try {
           await GetStorage.init();
           print('✅ Step 4: GetStorage initialized');
         } catch (e) {
           print('⚠️ GetStorage skipped: $e');
-          // continue anyway
         }
 
-        // ── App config ────────────────────────────────────────
-        _devMode = devMode;
-        _appLog = appLog;
-        _apiLog = apiLog;
-        _setDefault = setDefault;
-        _baseURLType = baseURLType;
+        // ── App config ────────────────────────────────────────────
+        _devMode      = devMode;
+        _appLog       = appLog;
+        _apiLog       = apiLog;
+        _setDefault   = setDefault;
+        _baseURLType  = baseURLType;
         _samplePayment = samplePayment;
         print('✅ Step 5: App config set');
 
-        // ── Mobile only settings ──────────────────────────────
+        // ── Mobile only ───────────────────────────────────────────
         if (Platform.isAndroid || Platform.isIOS) {
-          await SystemChrome.setEnabledSystemUIMode(
-            SystemUiMode.immersiveSticky,
-          );
+          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
           await SystemChrome.setPreferredOrientations([
             DeviceOrientation.landscapeLeft,
             DeviceOrientation.landscapeRight,
@@ -354,7 +362,7 @@ class App {
           print('✅ Step 6: Mobile orientation set');
         }
 
-        // ── Error widget ──────────────────────────────────────
+        // ── Error widget ──────────────────────────────────────────
         ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
           print('❌ Flutter Error: ${errorDetails.exception}');
           print('❌ Stack: ${errorDetails.stack}');
@@ -369,24 +377,12 @@ class App {
         print('✅ Step 9: runApp called successfully');
       },
       (error, stack) {
-        print('❌ FATAL ERROR CAUGHT: $error');
-        print('❌ STACK TRACE: $stack');
+        print('❌ FATAL ERROR: $error');
+        print('❌ STACK: $stack');
         ErrorHandlerService.instance.appRecordError(error, stack);
       },
     );
   }
-}
-
-// ── main.dart entry point ─────────────────────────────────────────────────────
-Future<void> main() async {
-  App.instance.initAndRunApp(
-    appLog: true,
-    apiLog: false,
-    devMode: true,
-    setDefault: true,
-    samplePayment: true,
-    baseURLType: AtomURLType.PROD,
-  );
 }
 
 // ── Root widget ───────────────────────────────────────────────────────────────
@@ -399,21 +395,19 @@ class MyApp extends StatelessWidget {
     final config = App.instance;
 
     return GetMaterialApp(
-      initialBinding: InitialBinding(),
+      initialBinding:          InitialBinding(),
       debugShowCheckedModeBanner: false,
-      title: config.appName,
-      initialRoute: Routes.splashScreen,
-      theme: appTheme,
-      getPages: AppRoutes.routes,
-      // Shows errors on screen instead of blank white
+      title:                   config.appName,
+      initialRoute:            Routes.splashScreen,
+      theme:                   appTheme,
+      getPages:                AppRoutes.routes,
       builder: (context, child) {
-        return child ??
-            const Center(
-              child: Text(
-                'App failed to load',
-                style: TextStyle(color: Colors.red, fontSize: 20),
-              ),
-            );
+        return child ?? const Center(
+          child: Text(
+            'App failed to load',
+            style: TextStyle(color: Colors.red, fontSize: 20),
+          ),
+        );
       },
     );
   }

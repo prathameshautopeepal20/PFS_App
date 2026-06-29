@@ -1,3 +1,9 @@
+// lib/services/wifi_plugin.dart
+// Mirrors .NET WifiFunctions.cs exactly
+// Key: persistent TcpClient per index (like .NET client_1, client_2...)
+// Fix: auto-reconnect if dongle disconnects during flash
+import 'dart:async';
+
 import 'dart:typed_data';
 import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_diagnostic/enum/seedkeyIndexType.dart';
@@ -11,7 +17,7 @@ import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
 import 'package:synchronized/synchronized.dart';
 
-// ── Per-dongle slot (client_8) ─────
+// ── Per-dongle slot (mirrors .NET client_1 ... client_8) ─────
 class _Slot {
   CommController ctrl   = CommController();
   DongleComm?    dongle;
@@ -52,7 +58,7 @@ class WiFiPlugin {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  closeSockets — mirrorsCloseSockets()
+  //  closeSockets — mirrors .NET CloseSockets()
   // ─────────────────────────────────────────────────────────
   bool _flashInProgress = false;
 
@@ -79,6 +85,8 @@ class WiFiPlugin {
       if (slot != null) await slot.ctrl.clearBuffer();
     } catch (_) {}
   }
+
+  //  checkDongle — mirrors .NET CheckClient_N()
   //  Closes existing connection, reconnects, creates DongleComm
   //  TX=7E0 forced (server sends 7DF which ECU ignores)
   // ─────────────────────────────────────────────────────────
@@ -96,13 +104,13 @@ class WiFiPlugin {
       final slot = _slots[index] ?? _Slot();
       _slots[index] = slot;
 
-      //  if connected → close → delay 50ms → new TcpClient
+      // .NET: if connected → close → delay 50ms → new TcpClient
       if (slot.ctrl.isConnected.value) {
         await slot.ctrl.disconnect();
         await _ms(50);
       }
 
-      //  client_N.ConnectAsync(IP, 6888).Wait(500)
+      // .NET: client_N.ConnectAsync(IP, 6888).Wait(500)
       await slot.ctrl.connectWifi(
           host: ip, port: 6888, selectedType: Connectivity.wiFi);
 
@@ -134,8 +142,11 @@ class WiFiPlugin {
       return false;
     }
   }
-  //  _reconnect — reconnect dongle if dropped during flash
 
+  // ─────────────────────────────────────────────────────────
+  //  _reconnect — reconnect dongle if dropped during flash
+  //  .NET does this implicitly via persistent TcpClient
+  // ─────────────────────────────────────────────────────────
   Future<bool> _reconnect(int index) async {
     final slot = _slots[index];
     if (slot == null) return false;
@@ -374,6 +385,8 @@ class WiFiPlugin {
         if (!ok) return 'ERROR: slot $index not ready';
         slot = _slots[index]!;
       }
+      // Non-null assertion — guaranteed by null check + reconnect above
+      final _slot = slot!;
 
       // Convert SREC → FlashingMatrixData (mirrors .NET ConvertToJson)
       print('🔄 Converting SREC[$index]: ${hexFileContent.length} chars');
@@ -390,64 +403,93 @@ class WiFiPlugin {
 
       // .NET: await dongleCommWin.CAN_StartTP(ecu_index)
       print('▶️  CAN_StartTP[$index]...');
-      await slot.dongle!.canStartTP();
+      await _slot.dongle!.canStartTP();
 
       // ══════════════════════════════════════════════════════════
-      // SEED KEY LOCK — Serial 2701/2702, then parallel bulk data
+      // SEED KEY LOCK — Sequential pre-flash, PARALLEL bulk data
       //
-      // The flashInterpreter runs the FULL sequence file:
-      //   1002 → 2701 → 2702 → 3101 → 34 → bulk data (47D2 blocks)
+      // Sequence: 1002 → 2701 → 2702 → 3101 → 34 → [sendbulkdata]
       //
-      // PROBLEM: Both ECU flash interpreters run in Future.wait.
-      // When ECU1 sends 2701, ECU2 sends 2701 ~90ms later on the
-      // SAME CAN bus → collision → ECUERROR_SECURITYACCESSDENIED.
+      // 1002/2701/2702/3101/34 = MUST be sequential (shared CAN bus)
+      // sendbulkdata (47D2 blocks) = SAFE to run in parallel
       //
-      // FIX: Wrap the ENTIRE flashInterpreter in _seedKeyLock.
-      // ECU1 acquires lock → runs full flash → releases lock.
-      // ECU2 was waiting → now acquires lock → runs full flash.
+      // How it works:
+      //   ECU1 acquires _seedKeyLock
+      //   ECU1 runs 1002→2701→2702→3101→34
+      //   ECU1 hits "sendbulkdata" → onBulkDataStart() fires → lock released
+      //   ECU2 NOW acquires _seedKeyLock (was waiting)
+      //   ECU2 runs 1002→2701→2702→3101→34
+      //   ECU2 hits "sendbulkdata" → onBulkDataStart() fires → lock released
+      //   BOTH ECUs now doing bulk data IN PARALLEL ✅
       //
-      // This means flash is effectively sequential, NOT parallel.
-      // But it's the only safe way with a shared CAN bus where
-      // security access must not overlap.
-      //
-      // TIME: ECU1 ~2min + ECU2 ~2min = ~4min total (sequential)
-      // This is safer than parallel crashes. To get true parallel,
-      // the sequence file must support parallel security access,
-      // which requires hardware isolation (separate CAN buses).
+      // Total time: ~30sec (seed key) + ~2min (parallel bulk) = ~2.5min
       // ══════════════════════════════════════════════════════════
       print('▶️  flashInterpreter[$index] seed=$seedKeyIndex sectors=${jsonData.noOfSectors}');
       print('🔐 [$index] Waiting for seed key lock...');
 
       String result = 'No Resp From Dongle';
+
+      // ── HOW THE LOCK WORKS ────────────────────────────────────────
+      // flashFuture is declared OUTSIDE but assigned INSIDE the lock.
+      // This means ECU2 CANNOT start its flash until ECU1 releases
+      // the lock (which happens when ECU1 hits sendbulkdata).
+      //
+      // Timeline:
+      //   t=0s  ECU1 acquires lock → starts 1002→2701→2702→3101→34
+      //   t=0s  ECU2 hits _seedKeyLock.synchronized → WAITS
+      //   t=30s ECU1 hits sendbulkdata → bulkCompleter fires → lock released
+      //   t=30s ECU2 acquires lock → starts 1002→2701→2702→3101→34
+      //   t=60s ECU2 hits sendbulkdata → lock released
+      //   t=30s→end  ECU1 bulk data running (parallel with ECU2 seed+bulk)
+      //   t=60s→end  ECU2 bulk data running
+      //   BOTH finish ~2.5-3 min total ✅
+      // ─────────────────────────────────────────────────────────────
+      Future<void>? flashFuture;
+      final bulkStartCompleter = Completer<void>();
+
       await _seedKeyLock.synchronized(() async {
-        print('🔑 [$index] Seed key lock acquired — running flash...');
-        try {
-          result = await slot?.diag!.flashInterpreter(
-                FlashConfig(seedKeyIndex: seedEnum),
-                jsonData.noOfSectors!,
-                jsonData.sectorData!,
-                seqFileContent,
-              ) ?? 'NOERROR';
-        } catch (e) {
-          print('❌ flashInterpreter[$index] exception: $e');
-          if (!slot!.ctrl.isConnected.value) {
-            print('🔌 Dongle $index disconnected during flash');
-          }
+        print('🔑 [$index] Seed key lock acquired — starting flash...');
+        // Flash starts HERE — inside the lock
+        // ECU2 cannot reach this point until ECU1 releases
+        flashFuture = _slot.diag!.flashInterpreter(
+          FlashConfig(seedKeyIndex: seedEnum),
+          jsonData.noOfSectors!,
+          jsonData.sectorData!,
+          seqFileContent,
+          onBulkDataStart: () {
+            // Called when sendbulkdata command is first reached
+            // This completes the future → synchronized block returns → lock released
+            print('🔓 [$index] sendbulkdata reached — releasing seed key lock');
+            if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
+          },
+        ).then((r) {
+          result = r ?? 'NOERROR';
+          // If flash ended without hitting sendbulkdata (error path), release lock
+          if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
+        }).catchError((e) {
+          print('❌ flashInterpreter[$index] error: $e');
           result = 'No Resp From Dongle';
-        }
-        print('🔓 [$index] Seed key lock releasing — result=$result');
+          if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
+        });
+
+        // Hold lock until sendbulkdata fires OR flash completes with error
+        await bulkStartCompleter.future;
+        print('🔓 [$index] Seed key lock releasing — bulk data now parallel');
       });
+
+      // Bulk data runs here outside the lock — parallel with other ECU
+      if (flashFuture != null) await flashFuture!;
 
       print('⏹️  startECUFlashing[$index]: result=$result');
 
       // .NET: await dongleCommWin.CAN_StopTP(ecu_index)
       try {
-        await slot.dongle!.canStopTP();
+        await _slot.dongle!.canStopTP();
       } catch (e) {
         print('⚠️  CAN_StopTP[$index] failed (dongle may have disconnected): $e');
       }
 
-      // treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
+      // .NET treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {
         print('   ✅ FLASH SUCCESS[$index]!');
         return 'NOERROR';
