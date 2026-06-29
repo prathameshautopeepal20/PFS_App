@@ -303,7 +303,7 @@ class _NavItem extends StatelessWidget {
 //  Version Info — overflow-safe
 // ════════════════════════════════════════════════════════════
 class _VersionInfo extends StatelessWidget {
-  final DashboardController controller;
+  final DashboardController   controller;
   final RxBool isExpanded;
   const _VersionInfo({
     required this.controller,
