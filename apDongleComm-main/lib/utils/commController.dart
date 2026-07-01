@@ -2,7 +2,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 import 'dart:typed_data';
 import 'package:ap_dongle_comm/utils/dongleComm.dart';
 import 'package:ap_dongle_comm/utils/enums/command_ids.dart';
@@ -14,9 +13,19 @@ import 'package:get/get.dart';
 import 'package:convert/convert.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:usb_serial/usb_serial.dart';
+import 'i_comm_controller.dart';
 
-class CommController extends GetxController {
-  var connectivity = Connectivity.none.obs;
+class CommController extends GetxController implements ICommController {
+  var connectivityRx = Connectivity.none.obs;
+  // 🔥 ADDED: implements ICommController so DongleComm (which now
+  // accepts the shared interface) can use this exact same class as
+  // before — no behavior change, GetX/.obs reactivity is untouched.
+  // This getter just exposes the unwrapped enum value for interface
+  // compliance; existing code that uses `connectivityRx.value` directly
+  // (the .obs field) is renamed below to connectivityRx to avoid a
+  // name collision with the interface's `connectivity` getter.
+  @override
+  Connectivity get connectivity => connectivityRx.value;
   SerialPort? serialPort;
   late DongleComm? dongleComm;
   var isConnected = false.obs;
@@ -51,7 +60,7 @@ class CommController extends GetxController {
       _socket = await Socket.connect(
         host,
         port,
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(minutes: 1),
       );
 
       print('✅ SOCKET CONNECTED $host:$port');
@@ -59,7 +68,7 @@ class CommController extends GetxController {
       isConnected.value = true;
 
       // ✅ Set the dynamic connectivity value
-      connectivity.value = selectedType;
+      connectivityRx.value = selectedType;
 
       _connectionStream.add(true);
       // Skip startForegroundService on Windows — causes semaphore timeout
@@ -148,17 +157,17 @@ class CommController extends GetxController {
       // ✅ DYNAMIC CONNECTIVITY ASSIGNMENT
       // This ensures sendCommand() and getUSBResponse() know which logic to use
       if (selectedType == Connectivity.rp1210Usb) {
-        connectivity.value = Connectivity.rp1210Usb;
+        connectivityRx.value = Connectivity.rp1210Usb;
       } else if (selectedType == Connectivity.canFdUsb) {
-        connectivity.value = Connectivity.canFdUsb;
+        connectivityRx.value = Connectivity.canFdUsb;
       } else if (selectedType == Connectivity.doipUsb) {
-        connectivity.value = Connectivity.doipUsb;
+        connectivityRx.value = Connectivity.doipUsb;
       } else {
-        connectivity.value = Connectivity.usb;
+        connectivityRx.value = Connectivity.usb;
       }
 
       _connectionStream.add(true);
-      print("✅ Mobile USB Ready: Connected as ${connectivity.value}");
+      print("✅ Mobile USB Ready: Connected as ${connectivityRx.value}");
     } catch (e) {
       print("🔥 USB Connection Failed ($selectedType): $e");
       _handleDisconnect();
@@ -197,15 +206,15 @@ class CommController extends GetxController {
       _desktopPort!.flush();
 
       isConnected.value = true;
-      // connectivity.value = Connectivity.usb;
+      // connectivityRx.value = Connectivity.usb;
       if (selectedType == Connectivity.rp1210Usb) {
-        connectivity.value = Connectivity.rp1210Usb;
+        connectivityRx.value = Connectivity.rp1210Usb;
       } else if (selectedType == Connectivity.canFdUsb) {
-        connectivity.value = Connectivity.canFdUsb;
+        connectivityRx.value = Connectivity.canFdUsb;
       } else if (selectedType == Connectivity.doipUsb) {
-        connectivity.value = Connectivity.doipUsb;
+        connectivityRx.value = Connectivity.doipUsb;
       } else {
-        connectivity.value = Connectivity.usb;
+        connectivityRx.value = Connectivity.usb;
       }
       _connectionStream.add(true);
 
@@ -251,7 +260,7 @@ class CommController extends GetxController {
         Connectivity.rp1210Usb,
         Connectivity.canFdUsb,
         Connectivity.doipUsb,
-      ].contains(connectivity.value)) {
+      ].contains(connectivityRx.value)) {
         if (_usbPort != null) {
           await _usbPort!.close();
           _usbPort = null;
@@ -310,7 +319,7 @@ class CommController extends GetxController {
     Uint8List finalPacket, {
     Duration timeout = const Duration(seconds: 5),
   }) async {
-    if (connectivity.value == Connectivity.none) {
+    if (connectivityRx.value == Connectivity.none) {
       return null;
     }
 
@@ -323,16 +332,12 @@ class CommController extends GetxController {
         Connectivity.canFdWiFi,
         Connectivity.rp1210WiFi,
         Connectivity.doipWiFi,
-      ].contains(connectivity.value)) {
+      ].contains(connectivityRx.value)) {
         final socket = _socket;
         if (socket == null) return null;
 
-        // 🔥 Clear stale data before sending — leftover bytes from previous
-        // frames cause next response to be misread (socket contamination bug)
-        if (_buffer.isNotEmpty) {
-          print("🧹 [sendCommand] Clearing ${_buffer.length} stale bytes before send");
-          _buffer.clear();
-        }
+        // Clear stale data before sending new command
+        _buffer.clear();
         socket.add(finalPacket);
         await socket.flush();
         print("📥 Waiting for WiFi response...");
@@ -344,7 +349,7 @@ class CommController extends GetxController {
         Connectivity.canFdUsb,
         Connectivity.rp1210Usb,
         Connectivity.doipUsb,
-      ].contains(connectivity.value)) {
+      ].contains(connectivityRx.value)) {
         if (_usbPort != null) {
           // ✅ Mobile USB
           await _usbPort!.write(finalPacket);
@@ -378,8 +383,6 @@ class CommController extends GetxController {
 
     // ✅ Add incoming data
     _buffer.addAll(data);
-    // Notify completer if waiting for data - key to parallel flash!
-    _tryCompleteFromBuffer();
 
     // 🔍 Debug AFTER adding
     print("📥 RAW RX: ${bytesToHex(data)}");
@@ -424,11 +427,11 @@ class CommController extends GetxController {
 
       /// 🔥 RESET STATE
       isConnected.value = false;
-      connectivity.value = Connectivity.none;
+      connectivityRx.value = Connectivity.none;
       _connectionStream.add(false);
 
-      /// Small delay after disconnect
-      await Future.delayed(const Duration(milliseconds: 50));
+      /// 🔥 VERY IMPORTANT DELAY
+      await Future.delayed(const Duration(milliseconds: 500));
 
       print("✅ Full disconnect completed");
     } catch (e) {
@@ -490,14 +493,14 @@ class CommController extends GetxController {
         Connectivity.rp1210Usb,
         Connectivity.canFdUsb,
         Connectivity.doipUsb,
-      ].contains(connectivity.value)) {
+      ].contains(connectivityRx.value)) {
         result = await getUSBResponse();
       } else if ([
         Connectivity.wiFi,
         Connectivity.rp1210WiFi,
         Connectivity.canFdWiFi,
         Connectivity.doipWiFi,
-      ].contains(connectivity.value)) {
+      ].contains(connectivityRx.value)) {
         result = await getWifiResponse();
       } else {
         // _showToast("Unsupported connectivity type", isError: true);
@@ -514,11 +517,8 @@ class CommController extends GetxController {
   }
 
   List<int> _buffer = [];
-  // Completer-based response system for parallel flash
-  // Each sendCommand creates its own Completer - no shared state race condition
-  Completer<Uint8List?>? _responseCompleter;
 
-  Future<Uint8List> _readExactBytes(int length, {int timeoutSec = 5}) async {
+  Future<Uint8List> _readExactBytes(int length, {int timeoutSec = 15}) async {
     final DateTime startTime = DateTime.now();
 
     while (_buffer.length < length) {
@@ -543,84 +543,62 @@ class CommController extends GetxController {
   }
 
 
-  // _readDirect: Completer-based - mirrors .NET task.Wait()
-  // Each call creates its own Completer - no polling, no race conditions
-  // When _handleData gets enough bytes, it completes the Completer
-  // This is safe for parallel flash - each ECU has its own CommController instance
+  // _readDirect: polls _buffer (filled by _socketSub._handleData)
+  // _socketSub already listens — we just poll _buffer directly
   Future<Uint8List?> _readDirect(Socket socket,
-      {Duration timeout = const Duration(seconds: 5)}) async {
-    // Set up completer for this specific request
-    _responseCompleter = Completer<Uint8List?>();
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    final deadline = DateTime.now().add(timeout);
 
-    // Set timeout
-    final timer = Timer(timeout, () {
-      if (!(_responseCompleter?.isCompleted ?? true)) {
-        print('⏰ _readDirect: timeout');
-        _responseCompleter?.complete(
-            Uint8List.fromList(utf8.encode('No Resp From Dongle')));
+    // Wait for at least 2 bytes (header)
+    while (_buffer.length < 2) {
+      if (DateTime.now().isAfter(deadline)) {
+        print('⏰ _readDirect: timeout waiting for header, buf=${_buffer.length}');
+        return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
       }
-    });
-
-    // Check if buffer already has data (arrived before we set up completer)
-    _tryCompleteFromBuffer();
-
-    try {
-      final result = await _responseCompleter!.future;
-      timer.cancel();
-      return result;
-    } catch (e) {
-      timer.cancel();
-      return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
+      await Future.delayed(const Duration(milliseconds: 1));
     }
-  }
 
-  // Called from _handleData AND from _readDirect setup
-  void _tryCompleteFromBuffer() {
-    if (_responseCompleter == null || _responseCompleter!.isCompleted) return;
-    if (_buffer.length < 2) return;
-
+    // Read header — calculate expected total
     final hdr0 = _buffer[0];
     final hdr1 = _buffer[1];
     final msgLen = ((hdr0 & 0x0F) << 8) + hdr1;
     final totalExpected = 2 + msgLen + 3;
     print('🧠 _readDirect: msgLen=$msgLen expecting=$totalExpected');
 
-    if (_buffer.length >= totalExpected) {
-      final result = Uint8List.fromList(_buffer.sublist(0, totalExpected));
-      _buffer.removeRange(0, totalExpected);
-      print('✅ _readDirect: ${bytesToHex(result)}');
-      _responseCompleter!.complete(result);
-      _responseCompleter = null;
+    // Wait for full response
+    while (_buffer.length < totalExpected) {
+      if (DateTime.now().isAfter(deadline)) {
+        print('⏰ _readDirect: timeout waiting for body, have=${_buffer.length} need=$totalExpected');
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 1));
     }
+
+    final n = _buffer.length < totalExpected ? _buffer.length : totalExpected;
+    final result = Uint8List.fromList(_buffer.sublist(0, n));
+    _buffer.removeRange(0, n);
+    print('✅ _readDirect: ${bytesToHex(result)}');
+    return result;
   }
 
   Future<Uint8List> getWifiResponse() async {
     try {
-      if (connectivity.value == Connectivity.wiFi) {
-        int nrc78Count = 0;
-        const int nrc78MaxRetries = 150; // Max 30 × ~500ms = ~15 seconds max wait
+      if (connectivityRx.value == Connectivity.wiFi) {
         while (true) {
           print("WiFi Communication : ---------INSIDE READ DATA -----------");
 
           // Step 1: Read 2 bytes (Header)
-          Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 5);
+          Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 15);
           if (trgtlen.isEmpty) {
             return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
           }
 
-          // 🔥 Skip dongle ACK packets (20 01 = dongle status, not ECU data)
-          if (trgtlen[0] == 0x20) {
-            final skip = ((trgtlen[0] & 0x0F) << 8) + trgtlen[1];
-            print("⚡ [getWifiResponse] Skipping dongle ACK 0x20, skip=$skip bytes");
-            if (skip > 0) await _readExactBytes(skip + 3, timeoutSec: 2);
-            continue;
-          }
-
-          // Step 2: Calculate msglen
+          // Step 2: Calculate msglen (Matches C# logic)
           int msglen = ((trgtlen[0] & 0x0F) << 8) + trgtlen[1];
 
-          // Step 3: Read remaining body
-          Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 5);
+          // Step 3: Read remaining body (msglen + 3)
+          // (C# uses msglen + 5 total, we read 2 then msglen + 3)
+          Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 15);
           if (remData.isEmpty) {
             return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
           }
@@ -634,21 +612,15 @@ class CommController extends GetxController {
             "WiFi Communication : ---------Response Received = ${bytesToHex(retArray)} -----------",
           );
 
-          // NRC 78 = ECU Busy/Pending — loop with limit
+          // 🔥 THE FIX: NRC 78 Handling (ECU Pending)
+          // If we see 7F [Service] 78, we loop again just like C# "ReadAgain = true"
           if (retArray.length >= 6 &&
               retArray[3] == 0x7F &&
               retArray[5] == 0x78) {
-            nrc78Count++;
-            print("⚠️ NRC 0x78 Detected: ECU Busy ($nrc78Count/$nrc78MaxRetries). Reading again...");
-            if (nrc78Count >= nrc78MaxRetries) {
-              print("❌ NRC 0x78 max retries reached — returning timeout");
-              _buffer.clear(); // Clear stale 0x78 packets
-              return Uint8List.fromList(utf8.encode("No Resp From Dongle"));
-            }
+            print("⚠️ NRC 0x78 Detected: ECU Busy. Reading again...");
             continue;
           }
 
-          nrc78Count = 0; // Reset on non-0x78 response
           return retArray;
         }
       }
@@ -676,11 +648,11 @@ class CommController extends GetxController {
   Future<Uint8List> getWifiResponse1() async {
     try {
       // ── CASE 1: Standard WiFi / CAN2X Path ──
-      if (connectivity.value == Connectivity.wiFi) {
+      if (connectivityRx.value == Connectivity.wiFi) {
         print("📡 [DEBUG] Standard WiFi Read Started");
 
         // 1. Read Header (2 bytes: Command ID and Status/Length)
-        Uint8List header = await _readExactBytes(2, timeoutSec: 5);
+        Uint8List header = await _readExactBytes(2, timeoutSec: 15);
         if (header.isEmpty) return Uint8List.fromList(utf8.encode("No Resp"));
 
         // 2. Identify the length
@@ -693,7 +665,7 @@ class CommController extends GetxController {
         int remaining = dataLen + 3;
 
         // 3. Read Body
-        Uint8List body = await _readExactBytes(remaining, timeoutSec: 2);
+        Uint8List body = await _readExactBytes(remaining, timeoutSec: 5);
         if (body.isEmpty) return Uint8List.fromList(utf8.encode("No Resp"));
 
         final builder = BytesBuilder();
@@ -819,7 +791,7 @@ class CommController extends GetxController {
 
       // STEP 1: Read exactly 4 bytes for the RP1210 length header
       // This matches: byte[] RetArray = new byte[4];
-      Uint8List header = await _readExactBytes(4, timeoutSec: 5);
+      Uint8List header = await _readExactBytes(4, timeoutSec: 10);
 
       if (header.length < 4) {
         print("WiFi Communication : ! Header Timeout or Connection Closed.");
@@ -844,7 +816,7 @@ class CommController extends GetxController {
       // STEP 3: Read the remaining bytes (msgLen - 4)
       // Matches: readByte = await Stream.ReadAsync(RetArray, 4, RetArray.Length - 4...);
       int remainingLen = msgLen - 4;
-      Uint8List remaining = await _readExactBytes(remainingLen, timeoutSec: 5);
+      Uint8List remaining = await _readExactBytes(remainingLen, timeoutSec: 10);
 
       if (remaining.length < remainingLen) {
         print("WiFi Communication : ! Partial Body Received.");
@@ -870,7 +842,7 @@ class CommController extends GetxController {
   }
 
   // Future<Uint8List?> getUSBResponse() async {
-  //   if (connectivity.value == Connectivity.usb) {
+  //   if (connectivityRx.value == Connectivity.usb) {
   //     try {
   //       print('USB Communication : ---------INSIDE READ DATA -----------');
 
@@ -921,13 +893,13 @@ class CommController extends GetxController {
   //   }
   // }
   Future<Uint8List?> getUSBResponse() async {
-    if (connectivity.value == Connectivity.usb) {
+    if (connectivityRx.value == Connectivity.usb) {
       try {
         print('USB Communication : ---------INSIDE READ DATA -----------');
 
         // 1. Read the first 2 bytes (Target Length Header)
         // This matches: uint bytesToRead = await dataReader.LoadAsync(2);
-        Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 5);
+        Uint8List trgtlen = await _readExactBytes(2, timeoutSec: 15);
 
         if (trgtlen.isEmpty) {
           return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
@@ -943,7 +915,7 @@ class CommController extends GetxController {
 
         // 3. Read the rest of the response
         // C# reads msglen + 3 more bytes (Data + CRC + Suffix)
-        Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 5);
+        Uint8List remData = await _readExactBytes(msglen + 3, timeoutSec: 15);
 
         if (remData.isEmpty) {
           return Uint8List.fromList(utf8.encode('No Resp From Dongle'));
@@ -986,7 +958,7 @@ class CommController extends GetxController {
   Future<Uint8List> getRP1210USBResponse() async {
     try {
       // 1. Read Header (4 bytes)
-      Uint8List header = await _readExactBytes(4, timeoutSec: 2);
+      Uint8List header = await _readExactBytes(4, timeoutSec: 5);
       if (header.length < 4) return Uint8List(0);
 
       // 2. Parse Length
@@ -995,7 +967,7 @@ class CommController extends GetxController {
 
       // 3. Read Body
       int bodyLen = msgLen - 4;
-      Uint8List body = await _readExactBytes(bodyLen, timeoutSec: 5);
+      Uint8List body = await _readExactBytes(bodyLen, timeoutSec: 3);
 
       // 🔥 THE FIX: Atomic Concatenation using BytesBuilder
       final builder = BytesBuilder();

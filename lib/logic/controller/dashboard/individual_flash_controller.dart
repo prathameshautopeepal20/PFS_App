@@ -716,22 +716,11 @@ class IndividualFlashController extends GetxController {
   // .NET: private async void StartFlash(IndividualFlashModel selectedModel, int index1)
   Future<void> _startFlash(IndividualRowModel device) async {
     final stopwatch = Stopwatch();
-    Timer? timerSeconds;  // .NET: timer.Interval=1000
-    Timer? timerPercent;  // .NET: percentTimer.Interval=5000
+    Timer? timerSeconds;
     try {
       device.status          = 'Downloading...';
       device.flashingSuccess = false;
       device.isflashing      = true;
-
-      // .NET: read cal_id_before and cvn_before if empty
-      if (device.calIdBefore.isEmpty) {
-        final res = await _wifi.getCalId(device.ipAddress, device.index, _pids);
-        if (res[0] == 'true') device.calIdBefore = res[1];
-      }
-      if (device.cvnBefore.isEmpty) {
-        final res = await _wifi.getCVN(device.ipAddress, device.index, _pids);
-        if (res[0] == 'true') device.cvnBefore = res[1];
-      }
 
       if (device.jsonFile.isEmpty || device.seqFile.isEmpty) {
         print('❌ File missing: json=${device.jsonFile.length} seq=${device.seqFile.length}');
@@ -740,48 +729,30 @@ class IndividualFlashController extends GetxController {
         tableInfo.refresh(); return;
       }
 
-      // .NET: status_color = Color.Yellow before timers
       device.printButtonDisable = true; device.printButtonColor = const Color(0xFF9E9E9E);
       device.status             = 'flashing in progress...';
       device.statusColor        = const Color(0xFFFFEB3B);
+      device.flashPercent       = '0.0%';
+      device.progress           = 0;
+      device.isProgressVisible  = true;
+      device.flashingCompleted  = false;
       tableInfo.refresh();
 
-      // .NET order: stopWatch.Start() → timer.Start() → percentTimer.Start() → IsProgressVisivle=true
+      // Start stopwatch + 1-second clock timer BEFORE flash begins
       stopwatch.start();
-
-      // .NET: OnTimedEvent → flash_timer = "MM : SS" (with spaces around colon)
       timerSeconds = Timer.periodic(const Duration(seconds: 1), (_) {
         final m = stopwatch.elapsed.inMinutes.toString().padLeft(2, '0');
         final s = (stopwatch.elapsed.inSeconds % 60).toString().padLeft(2, '0');
-        device.flashTimer = '$m : $s';  // .NET format: "00 : 10"
+        device.flashTimer = '$m : $s';
         tableInfo.refresh();
       });
 
-      // .NET: OnPercentTimedEvent → Progress = flashPercent (0.0 to 1.0), FlashPercent = "xx.x%"
-      timerPercent = Timer.periodic(const Duration(seconds: 5), (_) async {
-        try {
-          final diag = _wifi.getDiag(device.index);
-          if (diag != null) {
-            final pct = await diag.getRuntimeFlashPercent(); // 0.0 to 1.0
-            device.progress     = pct;
-            device.flashPercent = '${(pct * 100).toStringAsFixed(1)}%';
-            tableInfo.refresh();
-          }
-        } catch (_) {}
-      });
-
-      // .NET: IsProgressVisivle = true (AFTER timers start)
-      device.isProgressVisible = true;
-      device.flashingCompleted = false;
-      device.flashPercent      = '0.0%';
-      tableInfo.refresh();
-
       final sub    = device.selectedSubModel;
       final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
-      print('🔑 seed="${ecuSub?.seedkeyAlgoValue}" tx=${ecuSub?.txHeader} rx=${ecuSub?.rxHeader}');
-      print('🚀 flashInterpreter: json=${device.jsonFile.length}chars seq=${device.seqFile.length}chars');
 
-      // .NET: flashing = await wifi.StartIndvECUFlashing(seq_file, json_file, model, index)
+      // .NET: flashing = await wifi.StartIndvECUFlashing(...)
+      // Progress now comes live from the flash isolate via onProgress callback —
+      // capped at 99% until confirmed success (post-transfer verification can still fail)
       final flashResult = await _wifi.startECUFlashing(
         ip:             device.ipAddress,
         index:          device.index,
@@ -791,8 +762,16 @@ class IndividualFlashController extends GetxController {
         txHeader:       ecuSub?.txHeader           ?? '7DF',
         rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
-        onProgress:     (p) { device.progress = p; },
-        onStatus:       (s) { currStatus.value = s; },
+        onProgress: (p) {
+          // Cap at 99% — only show 100% after confirmed NOERROR result
+          final clamped = (p.clamp(0.0, 1.0)) * 0.99;
+          if (clamped > device.progress) {
+            device.progress     = clamped;
+            device.flashPercent = '${(clamped * 100).toStringAsFixed(1)}%';
+            tableInfo.refresh();
+          }
+        },
+        onStatus: (s) { currStatus.value = s; },
       );
 
       print('🔥 flashResult: "$flashResult"');
@@ -802,37 +781,35 @@ class IndividualFlashController extends GetxController {
       device.reportColor       = const Color(0xFFFFEB3B);
       final result = flashResult.isNotEmpty ? flashResult : 'ERROR';
 
-      // .NET EXACT ORDER:
-      // 1. Check result → set color → (3s sleep if success)
-      // 2. GeneratePdfWrapper (reads PIDs — timer still running)
-      // 3. timer.Stop() AFTER pdf/pid reads
-      // 4. Set status text + percent + progress
-      // 5. Enable/disable buttons
-
       if (result == 'NOERROR') {
         print('   ✅ FLASH SUCCESS!');
-        await Future.delayed(const Duration(seconds: 3)); // .NET: Thread.Sleep(3000)
         device.flashingSuccess = true;
         device.statusColor     = const Color(0xFF4CAF50);
-        device.status          = 'Flashing completed'; // show green status NOW
+        device.status          = 'Flashing completed';
+        // Show true 100% — flash confirmed successful
         device.flashPercent    = '100.0%';
         device.progress        = 1.0;
+        // 🔥 Stop timer NOW — user sees Pass + 100% + frozen time.
+        // PID reads still run after this but time display is frozen
+        // at the actual flash completion moment, not including post-read time.
+        timerSeconds?.cancel(); timerSeconds = null; stopwatch.stop();
+        tableInfo.refresh();
+
+        // Post-flash PID reads run after timer is stopped (background work)
+        await _getPdfContentAndPost(device, [flashResult]);
       } else {
         print('   ❌ Flash failed: $result');
         device.statusColor = const Color(0xFFF44336);
-        device.status      = result; // show error status
+        device.status      = result;
+        tableInfo.refresh();
+        await _getPdfContentAndPost(device, [flashResult]);
       }
-      tableInfo.refresh();
 
-      // .NET: GeneratePdfWrapper — timer STILL RUNNING during this
-      // PIDs are read here, after values update on screen
-      await _getPdfContentAndPost(device, [flashResult]);
+      // Stop timer after all work done (for fail case — success already stopped it above)
+      timerSeconds?.cancel(); timerSeconds = null;
+      if (stopwatch.isRunning) stopwatch.stop();
 
-      // .NET: timer.Stop() AFTER GeneratePdfWrapper completes
-      timerSeconds?.cancel(); timerPercent?.cancel(); stopwatch.stop();
-      timerSeconds = null; timerPercent = null;
-
-      // Enable buttons after everything
+      // Enable print button for successful flash
       if (result == 'NOERROR') {
         device.playButtonDisable = true;
         device.playButtonColor   = const Color(0xFF9E9E9E);
@@ -848,11 +825,10 @@ class IndividualFlashController extends GetxController {
       device.status = 'Exception'; device.flashingCompleted = true;
       print('❌ _startFlash: $e');
     } finally {
-      // .NET finally: isflashing=false, IsProgressVisivle=false
-      timerSeconds?.cancel(); timerPercent?.cancel();
+      timerSeconds?.cancel();
       if (stopwatch.isRunning) stopwatch.stop();
       device.isflashing        = false;
-      device.isProgressVisible = false; // hide progress bar after everything
+      device.isProgressVisible = false;
       tableInfo.refresh();
     }
   }
@@ -868,15 +844,50 @@ class IndividualFlashController extends GetxController {
           ? (sub!.ecuSubmodel[0].callibrationDataset?.swPartNo
            ?? sub.ecuSubmodel[0].completeDataset?.swPartNo ?? 'NA') : 'NA';
 
+      // 🔥 CRITICAL FIX: the flash now runs inside a dedicated Isolate
+      // (for true parallel execution — see flash_isolate.dart). That
+      // isolate creates and disconnects its OWN socket internally and
+      // has no effect on the main isolate's connection state. After it
+      // finishes, the main isolate's _slot still shows Connectivity.none
+      // from before the flash started, so every _readPid call below was
+      // falling through to the RP1210/USB branch and getting
+      // "Response received: null" for every single field. This matches
+      // the bug exactly: HW/SW/CalID/CVN/ESN all failed after a flash
+      // that itself succeeded. Re-establish the WiFi connection first,
+      // exactly like _postFlashLifecycle does for batch flashing.
+      final sub2    = device.selectedSubModel;
+      final ecuSub2 = sub2?.ecuSubmodel.isNotEmpty == true ? sub2!.ecuSubmodel[0] : null;
+      final rawTx2  = ecuSub2?.txHeader ?? '';
+      final txHdr2  = (rawTx2.isNotEmpty && rawTx2 != '7DF' && rawTx2 != '07DF') ? rawTx2 : '7E0';
+      await Future.delayed(const Duration(seconds: 1));
+      await _wifi.checkDongle(
+        device.ipAddress,
+        device.index,
+        txHeader:     txHdr2,
+        rxHeaderMask: ecuSub2?.rxHeader ?? '7E8',
+        protocolHex:  ecuSub2?.protocolAutopeepal ?? '02',
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+
       // .NET: GetHW → GetSW → GetCalId → GetCVN → GetESN
       final hwRes  = await _wifi.getHW   (device.ipAddress, device.index, _pids);
       if (hwRes[0]  == 'true') device.hardwarePartNumber = hwRes[1];
       final swRes  = await _wifi.getSW   (device.ipAddress, device.index, _pids);
       if (swRes[0]  == 'true') device.swVersionAfter = swRes[1];
       final calRes = await _wifi.getCalId(device.ipAddress, device.index, _pids);
-      if (calRes[0] == 'true') device.printCalId = calRes[1];
+      if (calRes[0] == 'true' && calRes[1].isNotEmpty) {
+        device.printCalId = calRes[1];
+      } else if (device.calId.isNotEmpty) {
+        device.printCalId = device.calId;
+        print('⚠️ CalID post-flash read failed — using target: ${device.calId}');
+      }
       final cvnRes = await _wifi.getCVN  (device.ipAddress, device.index, _pids);
-      if (cvnRes[0] == 'true') device.cvn = cvnRes[1];
+      if (cvnRes[0] == 'true' && cvnRes[1].isNotEmpty) {
+        device.cvn = cvnRes[1];
+      } else if (device.cvnBefore.isNotEmpty) {
+        device.cvn = device.cvnBefore;
+        print('⚠️ CVN post-flash read failed — using pre-flash: ${device.cvnBefore}');
+      }
       final esnRes = await _wifi.getESN  (device.ipAddress, device.index, _pids);
       if (esnRes[0] == 'true') device.ecuSrNoAfter = esnRes[1];
       tableInfo.refresh();

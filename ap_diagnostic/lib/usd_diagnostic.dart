@@ -2111,6 +2111,7 @@ class UDSDiagnostic {
   // Use 'int' in Dart as it handles 64-bit integers (replaces uint/long)
   int totalBytesToBeFlashed = 0;
   int realTimeBytesFlashed = 0;
+  bool _bulkTransferCompleteLogged = false;
 
   /// Calculates the current progress as a decimal (0.0 to 1.0)
   Future<double> getRuntimeFlashPercent() async {
@@ -2143,6 +2144,7 @@ class UDSDiagnostic {
   }) async {
     realTimeBytesFlashed = 0;
     totalBytesToBeFlashed = 0;
+    _bulkTransferCompleteLogged = false;
 
     ResponseArrayStatus? reprogrammingResponse = ResponseArrayStatus();
     List<LoopModel> loopModelList = [];
@@ -2178,6 +2180,7 @@ class UDSDiagnostic {
 
         String command = line.split(':')[0];
         String info = line.contains(':') ? line.split(':')[1] : "";
+        print('📜 [seq line $i] command="$command" @ ${DateTime.now()}');
 
         // ================= SEND COMMAND HANDLER =================
         if ([
@@ -2785,7 +2788,12 @@ class UDSDiagnostic {
             if (allFF) {
               print('⚡ Skipping all-0xFF block at offset $offset (blank sector)');
               offset += chunkLen;
-              blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
+              sectorStartAddr += chunkLen;       // ECU address pointer still moves
+              realTimeBytesFlashed += chunkLen;  // progress still counts
+              // 🔥 FIX: Do NOT increment blkSeqCnt here!
+              // ECU never receives this block, so its internal counter
+              // does not advance. Incrementing here caused a mismatch
+              // with the next real block sent -> WRONGBLOCKSEQCOUNTER.
               continue;
             }
 
@@ -2832,6 +2840,15 @@ class UDSDiagnostic {
             }
 
             Uint8List finalFrame = frameBuilder.toBytes();
+
+            // 🔥 YIELD POINT — critical for parallel flash on separate CAN buses
+            // Without this, two ECUs' CRC16/hex-encode CPU work (synchronous)
+            // can monopolize the single Dart event loop back-to-back, starving
+            // the other ECU's socket reads long enough to trigger NRC 0x78
+            // (ECU Busy) storms and apparent "freezing" even though each ECU
+            // has its own separate physical CAN bus and dongle.
+            await Future.delayed(Duration.zero);
+
             var response = await _dongleComm.can2xTxRx(
               finalFrame.length,
               hex.encode(finalFrame),
@@ -2845,6 +2862,13 @@ class UDSDiagnostic {
             sectorStartAddr += chunkLen; // Move the ECU address pointer forward
             realTimeBytesFlashed += chunkLen;
             blkSeqCnt = (blkSeqCnt + 1) & 0xFF;
+            if (realTimeBytesFlashed >= totalBytesToBeFlashed && !_bulkTransferCompleteLogged) {
+              _bulkTransferCompleteLogged = true;
+              print('🏁🏁🏁 BULK DATA TRANSFER COMPLETE (100% of firmware bytes sent) '
+                    '@ ${DateTime.now()} — entering post-transfer verification phase '
+                    '(checksum/routine-control/reset commands). Any failure from '
+                    'this point on is a VERIFICATION failure, not a data-transfer failure.');
+            }
           }
         }
         //         else if (command == "sendbulkdata") {

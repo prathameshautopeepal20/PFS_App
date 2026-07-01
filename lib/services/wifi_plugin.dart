@@ -16,6 +16,7 @@ import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
 import 'package:ecu_seedkey/ecu_seedkey.dart';
 import 'package:synchronized/synchronized.dart';
+import 'flash_isolate.dart';
 
 // ── Per-dongle slot (mirrors .NET client_1 ... client_8) ─────
 class _Slot {
@@ -192,16 +193,18 @@ class WiFiPlugin {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  _diagSession — 10 01 (DefaultSession) to recover ECU
+  //  _diagSession — 10 01 (DefaultSession) or 10 03 (ExtendedSession)
+  //  to recover ECU / set up correct session for the PID being read
   // ─────────────────────────────────────────────────────────
-  Future<bool> _diagSession(DongleComm dongle, int attempt) async {
+  Future<bool> _diagSession(DongleComm dongle, int attempt, {bool extended = false}) async {
     try {
-      final resp   = await dongle.can2xTxRx(2, '1001');
+      final sessionCmd = extended ? '1003' : '1001';
+      final resp   = await dongle.can2xTxRx(2, sessionCmd);
       final status = resp?.ecuResponseStatus ?? 'null';
       final data   = resp?.actualDataBytes
               ?.map((e) => e.toRadixString(16).padLeft(2, '0').toUpperCase())
               .join(' ') ?? '';
-      print('🔄 DiagSession[$attempt](10 01): $status data=$data');
+      print('🔄 DiagSession[$attempt](${extended ? "10 03 EXTENDED" : "10 01"}): $status data=$data');
       return status == 'NOERROR';
     } catch (e) {
       print('   ⚠️ DiagSession[$attempt] ex: $e');
@@ -261,15 +264,23 @@ class WiFiPlugin {
       print('   SA: ${_hex(saR)}');
       await _ms(50);
 
-      // 2-attempt loop (handles ECU stuck in programming session)
-      for (int attempt = 1; attempt <= 2; attempt++) {
+      // 4-attempt loop (was 2) — after a REAL flash+reset, the ECU needs
+      // more time to fully re-initialize its diagnostic stack than it
+      // does for a simple pre-flash check. Logs showed CalID(0904)/
+      // CVN(0906) returning ECUERROR_SERVICENOTSUPPORTED and SW(22F188)
+      // returning garbage non-ASCII data on the first 1-2 attempts post-
+      // flash, succeeding only with more retries/delay.
+      // Note: CalID(0904)/CVN(0906) may consistently return
+      // ECUERROR_SERVICENOTSUPPORTED even after retries — in that case
+      // the controller falls back to the known target value.
+      for (int attempt = 1; attempt <= 4; attempt++) {
         await _setupCAN(slot);
         final dsOk = await _diagSession(slot.dongle!, attempt);
         await _ms(50);
 
-        if (!dsOk && attempt == 1) {
-          print('   ⚠️ DiagSession attempt 1 failed → retrying...');
-          await _ms(100);
+        if (!dsOk && attempt < 4) {
+          print('   ⚠️ DiagSession attempt $attempt failed → retrying...');
+          await _ms(300);
           continue;
         }
 
@@ -333,7 +344,18 @@ class WiFiPlugin {
           print('   resp: status=$status');
         }
 
-        if (dsOk) break; // DiagSession succeeded but no data → no retry
+        // If we reach here, this attempt did not return valid data above.
+        // Previously this broke out as soon as dsOk was true, even if
+        // the PID read itself returned ECUERROR_SERVICENOTSUPPORTED or
+        // garbage data — meaning a successful diag session but a "not
+        // ready yet" ECU response was treated as final failure with NO
+        // retry. Now: always retry (up to the attempt limit) with a
+        // short delay, since the ECU may simply need more time after
+        // a real flash+reset before its diagnostic services come back.
+        if (attempt < 4) {
+          print('   ⚠️ [$index] $pidType attempt $attempt got no valid data — retrying...');
+          await _ms(400);
+        }
       }
     } catch (e) {
       print('❌ _readPid[$index] EXCEPTION: $e');
@@ -401,93 +423,49 @@ class WiFiPlugin {
         orElse: () => SEEDKEYINDEXTYPE.RE_SEEDKEY_EPM44,
       );
 
-      // .NET: await dongleCommWin.CAN_StartTP(ecu_index)
-      print('▶️  CAN_StartTP[$index]...');
-      await _slot.dongle!.canStartTP();
-
       // ══════════════════════════════════════════════════════════
-      // SEED KEY LOCK — Sequential pre-flash, PARALLEL bulk data
+      // 🎯 THE REAL FIX — TRUE PARALLEL VIA DART ISOLATE
       //
-      // Sequence: 1002 → 2701 → 2702 → 3101 → 34 → [sendbulkdata]
+      // Root cause (confirmed from .NET source): .NET wraps each
+      // ECU's CAN_StartTP + FlashInterpreter + CAN_StopTP inside
+      // `await Task.Run(...)` — giving each ECU its own dedicated
+      // OS thread-pool thread. That's genuine OS-level parallelism.
       //
-      // 1002/2701/2702/3101/34 = MUST be sequential (shared CAN bus)
-      // sendbulkdata (47D2 blocks) = SAFE to run in parallel
+      // Dart's async/await is cooperative SINGLE-THREADED concurrency
+      // — no amount of restructuring (locks, staggering, yields) can
+      // replicate true thread-level isolation on the same thread.
+      // That fundamental gap was the actual root cause of the
+      // intermittent "one ECU silently fails" bug, not a logic bug.
       //
-      // How it works:
-      //   ECU1 acquires _seedKeyLock
-      //   ECU1 runs 1002→2701→2702→3101→34
-      //   ECU1 hits "sendbulkdata" → onBulkDataStart() fires → lock released
-      //   ECU2 NOW acquires _seedKeyLock (was waiting)
-      //   ECU2 runs 1002→2701→2702→3101→34
-      //   ECU2 hits "sendbulkdata" → onBulkDataStart() fires → lock released
-      //   BOTH ECUs now doing bulk data IN PARALLEL ✅
-      //
-      // Total time: ~30sec (seed key) + ~2min (parallel bulk) = ~2.5min
+      // FIX: spawn a real Dart Isolate per ECU (see flash_isolate.dart).
+      // Each isolate creates its OWN socket/DongleComm/UDSDiagnostic
+      // chain internally and runs CAN_StartTP→flashInterpreter→
+      // CAN_StopTP completely independently on its own OS thread —
+      // this is Dart's actual equivalent of .NET's Task.Run.
       // ══════════════════════════════════════════════════════════
-      print('▶️  flashInterpreter[$index] seed=$seedKeyIndex sectors=${jsonData.noOfSectors}');
-      print('🔐 [$index] Waiting for seed key lock...');
-
-      String result = 'No Resp From Dongle';
-
-      // ── HOW THE LOCK WORKS ────────────────────────────────────────
-      // flashFuture is declared OUTSIDE but assigned INSIDE the lock.
-      // This means ECU2 CANNOT start its flash until ECU1 releases
-      // the lock (which happens when ECU1 hits sendbulkdata).
-      //
-      // Timeline:
-      //   t=0s  ECU1 acquires lock → starts 1002→2701→2702→3101→34
-      //   t=0s  ECU2 hits _seedKeyLock.synchronized → WAITS
-      //   t=30s ECU1 hits sendbulkdata → bulkCompleter fires → lock released
-      //   t=30s ECU2 acquires lock → starts 1002→2701→2702→3101→34
-      //   t=60s ECU2 hits sendbulkdata → lock released
-      //   t=30s→end  ECU1 bulk data running (parallel with ECU2 seed+bulk)
-      //   t=60s→end  ECU2 bulk data running
-      //   BOTH finish ~2.5-3 min total ✅
-      // ─────────────────────────────────────────────────────────────
-      Future<void>? flashFuture;
-      final bulkStartCompleter = Completer<void>();
-
-      await _seedKeyLock.synchronized(() async {
-        print('🔑 [$index] Seed key lock acquired — starting flash...');
-        // Flash starts HERE — inside the lock
-        // ECU2 cannot reach this point until ECU1 releases
-        flashFuture = _slot.diag!.flashInterpreter(
-          FlashConfig(seedKeyIndex: seedEnum),
-          jsonData.noOfSectors!,
-          jsonData.sectorData!,
-          seqFileContent,
-          onBulkDataStart: () {
-            // Called when sendbulkdata command is first reached
-            // This completes the future → synchronized block returns → lock released
-            print('🔓 [$index] sendbulkdata reached — releasing seed key lock');
-            if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
-          },
-        ).then((r) {
-          result = r ?? 'NOERROR';
-          // If flash ended without hitting sendbulkdata (error path), release lock
-          if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
-        }).catchError((e) {
-          print('❌ flashInterpreter[$index] error: $e');
-          result = 'No Resp From Dongle';
-          if (!bulkStartCompleter.isCompleted) bulkStartCompleter.complete();
-        });
-
-        // Hold lock until sendbulkdata fires OR flash completes with error
-        await bulkStartCompleter.future;
-        print('🔓 [$index] Seed key lock releasing — bulk data now parallel');
-      });
-
-      // Bulk data runs here outside the lock — parallel with other ECU
-      if (flashFuture != null) await flashFuture!;
-
-      print('⏹️  startECUFlashing[$index]: result=$result');
-
-      // .NET: await dongleCommWin.CAN_StopTP(ecu_index)
+      print('🧵 [$index] Spawning dedicated isolate for TRUE parallel flash...');
+      // Close the main-isolate's existing connection first — the isolate
+      // will open its OWN fresh socket to the dongle, and most dongle
+      // firmware only accepts one active TCP session at a time.
       try {
-        await _slot.dongle!.canStopTP();
-      } catch (e) {
-        print('⚠️  CAN_StopTP[$index] failed (dongle may have disconnected): $e');
-      }
+        await _slot.ctrl.disconnect();
+      } catch (_) {}
+      final protocolValue = int.tryParse(protocolHex, radix: 16) ?? 0x02;
+      final result = await runFlashInIsolate(
+        ip: ip,
+        index: index,
+        noOfSectors: jsonData.noOfSectors!,
+        sectorData: jsonData.sectorData!,
+        seqFileContent: seqFileContent,
+        flashConfig: FlashConfig(seedKeyIndex: seedEnum),
+        txHeader: _slot.txHeader,
+        rxHeader: _slot.rxHeader,
+        protocolValue: protocolValue,
+        onLog: (msg) => print(msg),
+        onProgress: onProgress,
+      );
+
+      print('⏹️  startECUFlashing[$index]: result=$result (via isolate)');
 
       // .NET treats ECUERROR_GENERALPROGRAMMINGFAILURE on last sector as success
       if (result == 'NOERROR' || result == 'ECUERROR_GENERALPROGRAMMINGFAILURE') {

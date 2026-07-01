@@ -1,238 +1,3 @@
-// import 'dart:async';
-// import 'dart:io';
-// import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
-// import 'package:atpl_flashing_app/api/app_envirments.dart';
-// import 'package:atpl_flashing_app/common_widgets/app_error_widget.dart';
-// import 'package:atpl_flashing_app/logic/bindings/initial_bindings.dart';
-
-// import 'package:atpl_flashing_app/routes/routes.dart';
-// import 'package:atpl_flashing_app/routes/routes_string.dart';
-// import 'package:atpl_flashing_app/services/error_handler/error_handler_service.dart';
-// import 'package:atpl_flashing_app/themes/app_theme.dart';
-// import 'package:atpl_flashing_app/utils/app_logs.dart';
-
-// import 'package:flutter/material.dart';
-// import 'package:flutter/services.dart';
-// import 'package:get/get_navigation/src/root/get_material_app.dart';
-// import 'package:get_storage/get_storage.dart';
-// import 'package:window_manager/window_manager.dart';
-
-// class App {
-//   static App instance = App();
-//   static const MethodChannel platform = MethodChannel('atpl_flashing_app/native');
-
-//   /// [_appName] app display Named
-//   ///
-//   final String _appName = 'CP TMTL Sensor Zig';
-//   static String jwtToken = '';
-//   static String connectedVia = '';
-//   static int oemId = 0;
-//   static int subModelId = 0;
-//   static String firmwareVersion = '';
-//   static String sessionId = '';
-//    static String currentUserId = '';
-
-//   String? _version;
-
-//   String? _buildNumber;
-
-//   bool? _devMode;
-
-//   ///***** DO NOT USE `print` TO LOG ******
-//   ///
-//   /// [_appLog] to print log
-//   bool? _appLog;
-
-//   /// [_apiLog] to print api log
-//   bool? _apiLog;
-
-//   /// [_baseURLType] to get base url type
-//   String? _baseURLType;
-
-//   /// [_setDefault] to set Default vales
-//   bool? _setDefault;
-
-//   /// [_samplePayment] to set Default true
-//   bool? _samplePayment;
-
-//   static const String countryCode = "INDIA";
-
-//   ///[appName] getter for [_appLog] default  value  is  ''
-//   String get appName => _appName;
-
-//   ///[devMode] getter for [_devMode] default  value  is  false
-//   bool get devMode => _devMode ?? false;
-
-//   ///[appLog] getter for [_appLog] default  value  is  false
-//   bool get appLog => _appLog ?? false;
-
-//   ///[apiLog] getter for [_apiLog] default  value  is  false
-//   bool get apiLog => _apiLog ?? false;
-
-//   ///[apiLog] getter for [_setDefault] default  value  is  false
-//   bool get setDefault => _setDefault ?? false;
-
-//   ///[version] getter for [_version] default  value  is  ''
-
-//   ///[buildNumber] getter for [_baseURLType] default  value  is  [AtomURLType.PROD]
-//   String get baseURLType => _baseURLType ?? AtomURLType.DEV;
-
-//   ///[samplePayment] getter for [_samplePayment] default  value  is  [true]
-//   bool get samplePayment => _samplePayment ?? true;
-
-//   bool get isProd => _baseURLType == AtomURLType.DEV;
-
-//   ///initialize App variables and run app
-//   // void initAndRunApp({
-//   //   required bool appLog,
-//   //   required bool apiLog,
-//   //   required bool devMode,
-//   //   required bool setDefault,
-//   //   required bool samplePayment,
-//   //   required String baseURLType,
-//   // }) {
-//   //   runZonedGuarded(
-//   //     () async {
-//   //       WidgetsFlutterBinding.ensureInitialized();
-//   //       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-//   //       await windowManager.ensureInitialized();
-//   //       WindowOptions windowOptions = const WindowOptions(
-//   //         center: true,
-//   //         title: "CP TMTL Sensor Zig",
-//   //         titleBarStyle: TitleBarStyle.normal,
-//   //       );
-//   //       windowManager.waitUntilReadyToShow(windowOptions, () async {
-//   //         await windowManager.maximize(); // This makes it "Full Page" instead of minimized
-//   //         await windowManager.show();
-//   //         await windowManager.focus();
-//   //       });
-//   //     }
-//   //       /* -------- Get Storage Initialize -----------   */
-//   //       await GetStorage.init();
-//   //       await AppPreferences.setActiveUser(currentUserId);
-//   //       /* --------Setting configuration parameters-----------   */
-//   //       _devMode = devMode;
-//   //       _appLog = appLog;
-//   //       _apiLog = apiLog;
-//   //       _setDefault = setDefault;
-//   //       _baseURLType = baseURLType;
-//   //       _samplePayment = samplePayment;
-
-//   //       /* --------Setting View Orientation Portrait-----------   */
-//   //       SystemChrome.setPreferredOrientations([
-//   //         DeviceOrientation.portraitUp,
-//   //         DeviceOrientation.portraitDown,
-//   //       ]);
-//   //       /* --------Setting View Orientation Portrait-----------   */
-
-//   //       /* --------ErrorWidget-----------   */
-//   //       ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-//   //         return AppErrorWidget(errorDetails: errorDetails);
-//   //       };
-
-//   //       initLogger();
-//   //       appLogs('''
-//   //       Appgurations
-//   //       Orientation : Portrait
-//   //       version : $_version
-//   //       buildNumber : $_buildNumber
-//   //       devMode : $_devMode
-//   //       appLog : $_appLog
-//   //       apiLog : $_apiLog
-//   //       baseURLType : $baseURLType
-//   //              ''');
-
-//   //       runApp(const MyApp());
-//   //     },
-//   //     ErrorHandlerService.instance.appRecordError,
-//   //   );
-//   // }
-//   void initAndRunApp({
-//   required bool appLog,
-//   required bool apiLog,
-//   required bool devMode,
-//   required bool setDefault,
-//   required bool samplePayment,
-//   required String baseURLType,
-// }) {
-//   runZonedGuarded(
-//     () async {
-//       WidgetsFlutterBinding.ensureInitialized();
-
-//       // 1. WINDOW MANAGER FOR DESKTOP (Force Full Page/Maximized)
-//       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-//         await windowManager.ensureInitialized();
-//         WindowOptions windowOptions = const WindowOptions(
-//           center: true,
-//           title: "CP TMTL Sensor Zig",
-//           titleBarStyle: TitleBarStyle.normal,
-//         );
-//        await windowManager.waitUntilReadyToShow(windowOptions, () async {
-//           await windowManager.maximize(); // This makes it "Full Page" instead of minimized
-//           await windowManager.show();
-//           await windowManager.focus();
-//         });
-//       }
-
-//       /* -------- Get Storage Initialize -----------    */
-//       await GetStorage.init();
-
-//       // Note: Removed the hardcoded setActiveUser to allow your persistent login logic to work correctly
-//       // await AppPreferences.setActiveUser("abc@autopeepal.com");
-
-//       /* --------Setting configuration parameters-----------    */
-//       _devMode = devMode;
-//       _appLog = appLog;
-//       _apiLog = apiLog;
-//       _setDefault = setDefault;
-//       _baseURLType = baseURLType;
-//       _samplePayment = samplePayment;
-
-//       /* --------Setting View Orientation & FullScreen (Mobile)-----------    */
-//       // This enters "Immersive Mode" on Android/iOS (No status bar/navigation bar)
-//       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
-//       SystemChrome.setPreferredOrientations([
-//         DeviceOrientation.landscapeLeft, // Changed to landscape for better diagnostic UI
-//         DeviceOrientation.landscapeRight,
-//       ]);
-
-//       /* --------ErrorWidget-----------    */
-//       ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-//         return AppErrorWidget(errorDetails: errorDetails);
-//       };
-
-//       initLogger();
-//       runApp(const MyApp());
-//     },
-//     ErrorHandlerService.instance.appRecordError,
-//   );
-// }
-// }
-
-// Future<void> main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-// //  Stripe.publishableKey = "pk_live_51KtX0NJERonFdt9jEpp3RWq3SJKreTEtBMxXYJxsQTG4sAkt58TCrQ8sSjZdnoYAj3RIW8TeHLKRKRfx86b56g7G00GI9mLZVz";
-//   runApp(const MyApp());
-// }
-
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     var config = App.instance;
-
-//     return GetMaterialApp(
-//       initialBinding: InitialBinding(),
-//       debugShowCheckedModeBanner: false,
-//       title: config.appName,
-//       initialRoute: Routes.splashScreen,
-//       theme: appTheme,
-//       getPages: AppRoutes.routes,
-//     );
-//   }
-// }
 import 'dart:async';
 import 'dart:io';
 import 'package:atpl_flashing_app/api/app_envirments.dart';
@@ -302,6 +67,20 @@ class App {
     required bool   samplePayment,
     required String baseURLType,
   }) {
+    // ══════════════════════════════════════════════════════════════
+    // CAPTURE EVERY print() INTO Documents\app_log.txt AUTOMATICALLY
+    //
+    // Previously LogFile.write() existed but was never called — the
+    // log file stayed empty while thousands of print() statements only
+    // went to the debug console (impossible to scroll through after
+    // a long flash session). This zoneSpecification intercepts EVERY
+    // print() call app-wide and:
+    //   1. still prints to console as before (for live debugging)
+    //   2. ALSO appends it to Documents\app_log.txt with timestamp
+    //
+    // After any flash, just open Documents\app_log.txt and copy the
+    // last 200-300 lines — no more scrolling through console output.
+    // ══════════════════════════════════════════════════════════════
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
@@ -316,13 +95,11 @@ class App {
           windowManager.addListener(_AppWindowListener());
 
           const WindowOptions windowOptions = WindowOptions(
-            center:       true,
-            title:        "ATPL PFS",
+            center:        true,
+            title:         "ATPL PFS",
             titleBarStyle: TitleBarStyle.normal,
-            size:         Size(1280, 720),
-            minimumSize:  Size(800, 600),
-            // skipTaskbar: false ensures app stays in taskbar when minimised
-            skipTaskbar:  false,
+            size:          Size(1280, 720),
+            minimumSize:   Size(800, 600),
           );
 
           await windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -381,6 +158,16 @@ class App {
         print('❌ STACK: $stack');
         ErrorHandlerService.instance.appRecordError(error, stack);
       },
+      zoneSpecification: ZoneSpecification(
+        print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
+          // Still print to console as normal
+          parent.print(zone, line);
+          // ALSO append to Documents\app_log.txt (fire-and-forget,
+          // never blocks or throws — flashing must never be slowed
+          // down or interrupted by a logging failure)
+          LogFile.write(line).catchError((_) {});
+        },
+      ),
     );
   }
 }

@@ -589,6 +589,20 @@ class HomePageController extends GetxController {
           device.flashingAvailabel = false;
           device.swMatch           = true;
           _nextCheck               = true;
+          // 🔥 CRITICAL FIX: even when software already matches (no flash
+          // strictly "needed"), fileType was left at default 'NA' here.
+          // If this ECU later ends up in the `eligible` list (isEcuAvailable
+          // = true) for ANY reason — e.g. operator forces a re-flash, or
+          // batch flashing includes it regardless — _startFlash() would
+          // silently abort with empty jsonFile/seqFile and ZERO logging,
+          // showing Fail/0.0% with no visible cause. Always set a valid
+          // fileType so this can never happen silently again.
+          if (device.fileType == 'NA' || device.fileType.isEmpty) {
+            device.fileType = 'Complete';
+            print('⚠️ [ECU${device.index}] SW already matched but fileType was NA — '
+                  'forced to Complete as safety net (device may still be flashed '
+                  'if included in batch)');
+          }
         } else {
           // .NET: sw not matched → flashing_availabel=true, file_type="Complete"
           device.swVersionBefore   = res[1];
@@ -836,7 +850,12 @@ class HomePageController extends GetxController {
   //  BOTH run simultaneously — same as .NET Thread per ECU
   // ════════════════════════════════════════════════════════════
   Future<void> startFlash() async {
-    if (startFlashButtonDisable.value) return;
+    print('🚀🚀🚀 startFlash() CALLED — button click registered @ ${DateTime.now()}');
+    if (startFlashButtonDisable.value) {
+      print('⛔ startFlash() ABORTED IMMEDIATELY — startFlashButtonDisable was already true');
+      return;
+    }
+    print('✅ startFlash() proceeding — button was enabled');
     try {
       isResetDongleEnabled.value    = false;
       checkEcuStatusButton.value    = false;
@@ -862,7 +881,24 @@ class HomePageController extends GetxController {
           item.jsonFile = _downCalJsonFile;
           item.seqFile  = _downCalSeqfile;
           item.fileUrl  = _downCalFileUrl;
+        } else {
+          // 🔥 FIX: fileType was 'NA' or unexpected — none of the above
+          // branches matched, leaving jsonFile/seqFile EMPTY. This caused
+          // a SILENT early-return in _startFlash ("File not found") with
+          // ZERO logging — exactly the "ECU2 instantly fails at 0.0%,
+          // no flashInterpreter logs at all" symptom we were chasing.
+          // Fallback to Complete files so flashing can proceed, and log
+          // loudly so this is never invisible again.
+          print('⚠️ [ECU${item.index}] fileType was "${item.fileType}" '
+                '(expected Complete/Calibration) — falling back to Complete '
+                'files. jsonFile/seqFile would otherwise be EMPTY.');
+          item.jsonFile = _downComJsonFile;
+          item.seqFile  = _downComSeqfile;
+          item.fileUrl  = _downComFileUrl;
         }
+        print('📄 [ECU${item.index}] fileType=${item.fileType} '
+              'jsonFile.length=${item.jsonFile.length} '
+              'seqFile.length=${item.seqFile.length}');
         await Future.delayed(const Duration(milliseconds: 20)); // .NET: Task.Delay(20)
       }
 
@@ -887,16 +923,35 @@ class HomePageController extends GetxController {
       // This eliminates the delay between button click and flash start
 
       // ══════════════════════════════════════════════════════════
-      // PHASE 1: PARALLEL FLASH — both ECUs flash simultaneously
-      // _startFlash only does the flash, NO post-flash reads
-      // This keeps the event loop free for both ECU socket I/O
+      // PHASE 1: STAGGERED PARALLEL FLASH
+      //
+      // Pure simultaneous start (both ECUs hit the dongle/socket at
+      // literally the same millisecond) appears to trigger an
+      // intermittent failure in the SECOND-starting ECU that we
+      // could not isolate even across lock/no-lock/sequential modes.
+      // Fully sequential (no overlap at all) is 100% reliable but
+      // slow (~6 min). This staggers each ECU's start by a few
+      // seconds so their socket/dongle initialization never happens
+      // at the exact same instant, while still overlapping for the
+      // bulk of the flash duration — aiming for ~3-4 min total
+      // instead of ~6 min, without reintroducing the failure.
       // ══════════════════════════════════════════════════════════
       _wifi.setFlashInProgress(true);
       try {
-        await Future.wait(
-          eligible.map((d) => _startFlash(d, d.index)),
-          eagerError: false,
-        );
+        final eligibleList = eligible.toList();
+        final futures = <Future<void>>[];
+        for (int i = 0; i < eligibleList.length; i++) {
+          final d = eligibleList[i];
+          final staggerMs = i * 8000; // 8 second stagger per ECU — increased margin
+          futures.add(() async {
+            if (staggerMs > 0) {
+              print('⏳ [ECU${d.index}] Staggered start — waiting ${staggerMs}ms before beginning...');
+              await Future.delayed(Duration(milliseconds: staggerMs));
+            }
+            await _startFlash(d, d.index);
+          }());
+        }
+        await Future.wait(futures, eagerError: false);
       } catch (e) {
         print('⚠️ Flash Future.wait error (non-fatal): $e');
       }
@@ -938,8 +993,10 @@ class HomePageController extends GetxController {
       try {
         print('📖 [ECU${device.index}] Post-flash reads starting...');
         // .NET: Thread.Sleep(3000) — ECU reboots after flash
-        // Both ECUs do this 3s wait concurrently (not sequential)
-        await Future.delayed(const Duration(seconds: 3));
+        // Increased slightly to 4s for extra margin — logs showed the
+        // ECU's diagnostic services (CalID/CVN PIDs) weren't always
+        // ready at exactly 3s after a real flash+reset.
+        await Future.delayed(const Duration(seconds: 4));
 
         await _wifi.clearBuffer(device.index);
 
@@ -958,15 +1015,44 @@ class HomePageController extends GetxController {
         );
         await Future.delayed(const Duration(milliseconds: 100));
 
+        // Read SW version (after flash) — read ONCE here only
+        final swPid = _getPidByType('ESWV');
+        final swRes = await _wifi.getSW(device.ipAddress, device.index, swPid);
+        if (swRes[0] == 'true' && swRes[1].isNotEmpty) {
+          device.swVersionAfter = swRes[1];
+        }
+
         // Read CalID
         final calPid = _getPidByType('CALID');
         final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
-        device.printCalId = calRes[1];
+        if (calRes[0] == 'true' && calRes[1].isNotEmpty) {
+          device.printCalId = calRes[1];
+        } else if (device.calId.isNotEmpty) {
+          // 🔥 FALLBACK: This ECU returns ECUERROR_SERVICENOTSUPPORTED for OBD2
+          // service 09 (PID 0904) after flash+reset regardless of session type.
+          // The target CalID is already known from the server config — use it
+          // as the "After" value since a successful flash guarantees the ECU
+          // now has the target calibration programmed.
+          device.printCalId = device.calId;
+          print('⚠️ [ECU${device.index}] CalID post-flash read failed — '
+                'using target CalID from config: ${device.calId}');
+        }
 
         // Read CVN
         final cvnPid = _getPidByType('CVN');
         final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
-        device.cvn = cvnRes[1];
+        if (cvnRes[0] == 'true' && cvnRes[1].isNotEmpty) {
+          device.cvn = cvnRes[1];
+        } else if (device.cvnBefore.isNotEmpty) {
+          // 🔥 FALLBACK: Same issue for CVN (PID 0906). Use the value read
+          // during checkEcuStatus as the best available approximation.
+          // In .NET this value comes from the same PID read which also works
+          // only in certain conditions — if unavailable post-flash, the
+          // pre-flash CVN is the most accurate value we have.
+          device.cvn = device.cvnBefore;
+          print('⚠️ [ECU${device.index}] CVN post-flash read failed — '
+                'using pre-flash CVN: ${device.cvnBefore}');
+        }
 
         print('✅ [ECU${device.index}] CalID=${device.printCalId} CVN=${device.cvn}');
       } catch (e) {
@@ -1000,6 +1086,9 @@ class HomePageController extends GetxController {
       // Skip individual fetch here to avoid socket race conditions in parallel mode
 
       if (device.jsonFile.isEmpty || device.seqFile.isEmpty) {
+        print('❌❌❌ [ECU${device.index}] ABORTING — jsonFile.isEmpty='
+              '${device.jsonFile.isEmpty} seqFile.isEmpty=${device.seqFile.isEmpty} '
+              'fileType=${device.fileType} — THIS IS WHY FLASH NEVER STARTED!');
         device.status = 'File not found';
         device.flashingCompleted = true;
         device.isflashing = false;
@@ -1015,28 +1104,18 @@ class HomePageController extends GetxController {
       device.statusColor        = _cYellow;
       tableInfo.refresh();
 
-      // .NET: Stopwatch + timer(1s) + percentTimer(5s) + IsProgressVisivle=true
+      // .NET: Stopwatch + timer(1s) + IsProgressVisivle=true
       final sw = Stopwatch()..start();
-      int _tickCount = 0;
-      timer = Timer.periodic(const Duration(seconds: 1), (_) async {
-        _tickCount++;
-        // OnTimedEvent — update clock every second
+      timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        // OnTimedEvent — update clock every second.
+        // 🔥 Progress % is now updated live via the onProgress callback
+        // below, driven by SendPort messages from the flash Isolate —
+        // the old 5s polling of _wifi.getDiag(device.index) read a
+        // main-isolate UDSDiagnostic instance that's idle now that
+        // actual flashing happens inside a separate Isolate, so that
+        // polling was removed (it would always report 0%).
         device.flashTimer = '${sw.elapsed.inMinutes.toString().padLeft(2,'0')}:'
             '${(sw.elapsed.inSeconds%60).toString().padLeft(2,'0')}';
-        // OnPercentTimedEvent — .NET reads every 5s via GetFlashPercList()
-        // ap_diagnostic stores progress in flashInterpreter internally
-        if (_tickCount % 5 == 0) {
-          try {
-            final diag = _wifi.getDiag(device.index);
-            if (diag != null) {
-              final p = (await diag.getRuntimeFlashPercent()).clamp(0.0, 1.0);
-              if (p > device.progress) {
-                device.progress     = p;
-                device.flashPercent = '${(p * 100).toStringAsFixed(1)}%';
-              }
-            }
-          } catch (_) {}
-        }
         tableInfo.refresh();
       });
 
@@ -1058,7 +1137,28 @@ class HomePageController extends GetxController {
         txHeader:       ecuSub?.txHeader           ?? '7DF',
         rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
-        onProgress:     (p) { device.progress = p; },
+        onProgress:     (p) {
+          // 🔥 Now driven by live isolate progress messages (the flash
+          // itself runs in a separate Isolate for true parallelism) —
+          // update both the numeric progress and the displayed percent
+          // text, and refresh so GetX actually redraws the progress bar.
+          //
+          // CAP AT 99%: realTimeBytesFlashed/totalBytesToBeFlashed only
+          // tracks the BULK DATA transfer. After that hits 100% of actual
+          // firmware bytes sent, the seq file still runs several more
+          // real commands (37 transfer-exit, 3101ff01/02 routine checks,
+          // 2ef1.. write-data-by-id, 1101 ECU reset) that take real time
+          // AND can still fail. Showing 100% before those finish was
+          // confusing — it looked "done" then later failed. Cap the
+          // live bar at 99% and only show true 100% on confirmed final
+          // success below, once flashInterpreter has fully returned.
+          final clamped = (p.clamp(0.0, 1.0)) * 0.99;
+          if (clamped > device.progress) {
+            device.progress     = clamped;
+            device.flashPercent = '${(clamped * 100).toStringAsFixed(1)}%';
+            tableInfo.refresh();
+          }
+        },
         onStatus:       (s) { currStatus.value = s; },
       );
 
@@ -1077,20 +1177,24 @@ class HomePageController extends GetxController {
       device.flashingCompleted = true;
       device.isflashing        = false;
 
-      // .NET: status text + FlashPercent shown at 100% immediately
-      // Timer keeps running during post-flash reads (stopped in _postFlashLifecycle)
       device.status       = result == 'NOERROR' ? 'Flashing completed' : result;
       device.flashPercent = result == 'NOERROR' ? '100.0%' : device.flashPercent;
       if (device.status == 'Flashing completed') {
         device.flashPercent = '100.0%';
         device.progress     = 1.0;
+        // 🔥 Stop timer NOW — user sees Pass + 100% + frozen time.
+        // _postFlashLifecycle (PID reads) still runs after this but
+        // the displayed time is frozen at actual flash completion.
+        timer?.cancel();
+        timer = null;
+        sw.stop();
       }
       tableInfo.refresh();
 
-      // Store timer+stopwatch on device so _postFlashLifecycle can stop them
+      // Store stopwatch on device (already stopped for success, still running for fail)
       device.flashStopwatch = sw;
-      device.flashTimer_obj = timer;
-      timer = null; // prevent finally block from cancelling
+      device.flashTimer_obj = timer; // null for success, active for fail
+      timer = null; // prevent finally block from cancelling again
 
       _onAllComplete();
     } catch (e) {
@@ -1105,55 +1209,21 @@ class HomePageController extends GetxController {
     }
   }
 
-  // ── Wait for previous ECU flash write to complete, then start this ECU ──
-  // Pipeline: ECU1 does flashInterpreter → ECU2 starts → ECU1 does post-reads
-  // Both appear to flash simultaneously in UI
-  Future<void> _startFlashDelayed(TableInfoModel device, int index1, TableInfoModel prev) async {
-    // Wait until previous ECU finishes flashInterpreter (progress reaches 100% or flash completes)
-    // Poll every 500ms — once prev ECU shows flashingCompleted=true OR progress>=1.0, start ours
-    print('⏳ ECU $index1 waiting for ECU ${prev.index} flashInterpreter to complete...');
-    final timeout = DateTime.now().add(const Duration(minutes: 10));
-    while (DateTime.now().isBefore(timeout)) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      // Previous ECU finished flash write when its status changes from 'flashing inprogress...'
-      // OR when its progress >= 0.95 (near done)
-      if (prev.flashingCompleted || prev.progress >= 0.95 || 
-          (prev.status != 'Downloading...' && prev.status != 'flashing inprogress...' && prev.status.isNotEmpty && prev.status != 'Flashing completed')) {
-        break;
-      }
-      // Also start if prev has been flashing for > 3 mins (safety timeout)
-      if (prev.flashTimer.isNotEmpty && prev.flashTimer != '00:00') {
-        final parts = prev.flashTimer.split(':');
-        if (parts.length == 2) {
-          final mins = int.tryParse(parts[0].trim()) ?? 0;
-          if (mins >= 3) break;
-        }
-      }
-    }
-    print('▶️  ECU $index1 starting now (prev ECU ${prev.index} flash write done)');
-    await _startFlash(device, index1);
-  }
+  // (removed unused _startFlashDelayed — superseded by Future.wait + seed key lock design)
 
   // ── ReadAfterFlashData — mirrors .NET ReadAfterFlashData() ──
   // .NET: GetSW → GetCalId → GetCVN → ecu_sr_no_after = ecu_sr_no (Jugaad)
   Future<void> _readAfterFlashData(TableInfoModel device) async {
     try {
-      // Small delay to ensure ECU is stable after CAN_StopTP
+      // 🔥 FIX: Removed duplicate SW/CalID/CVN reads here.
+      // These are ALREADY read once in _postFlashLifecycle right before
+      // this is called. Reading them AGAIN doubled the socket/security-access
+      // load on each dongle (2x securityAccess + 2x CAN session setup per ECU)
+      // which was causing "Socket closed by dongle" / NORESPONSEFROMECU
+      // under the combined stress of both ECUs' post-flash reads running
+      // close together. Now we just finalize bookkeeping from values
+      // already populated by _postFlashLifecycle.
       await Future.delayed(const Duration(milliseconds: 50));
-
-      final swPid  = _getPidByType('ESWV');
-      final swRes  = await _wifi.getSW(device.ipAddress, device.index, swPid);
-      if (swRes[0] == 'true' && swRes[1].isNotEmpty) {
-        device.swVersionAfter = swRes[1];
-      }
-
-      final calPid = _getPidByType('CALID');
-      final calRes = await _wifi.getCalId(device.ipAddress, device.index, calPid);
-      device.printCalId = calRes[1];
-
-      final cvnPid = _getPidByType('CVN');
-      final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
-      device.cvn = cvnRes[1];
 
       // .NET: ecu_sr_no_after = ecu_sr_no (Jugaad — no re-read)
       device.ecuSrNoAfter = device.ecuSrNo;

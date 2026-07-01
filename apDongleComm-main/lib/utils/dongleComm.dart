@@ -1,7 +1,6 @@
-import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:ap_dongle_comm/utils/commController.dart';
+import 'package:ap_dongle_comm/utils/i_comm_controller.dart';
 import 'package:ap_dongle_comm/utils/enums/command_ids.dart';
 import 'package:ap_dongle_comm/utils/enums/connectivity.dart';
 import 'package:ap_dongle_comm/utils/enums/protocol.dart';
@@ -12,11 +11,13 @@ import 'package:ap_dongle_comm/utils/model/sessionLogModel.dart';
 import 'package:convert/convert.dart';
 
 class DongleComm {
-
-  // Per-instance lock — each ECU has its own lock, no cross-ECU blocking
-  final Lock _lock = Lock();
-
-  CommController? comm;
+  // 🔥 CHANGED: was `CommController? comm` — now accepts the shared
+  // ICommController interface so either the GetX-based CommController
+  // (main isolate) or CommControllerIsolateSafe (worker isolate) can
+  // be used interchangeably. DongleComm only ever calls connectivity/
+  // hexToBytes/readData/sendCommand on this field — all 4 are part
+  // of the interface, so no other code in this file needs to change.
+  ICommController? comm;
   bool isChannel;
   String? channelId;
   List<SessionLogsModel> logs = []; // nullable, could be null
@@ -409,11 +410,12 @@ class DongleComm {
   }
 
   Future<ResponseArrayStatus> can2xTxRx(int framelength, String txdata) async {
-    return await _lock.synchronized(() async {
     ResponseArrayStatus responseStructure;
+
     try {
       print("------ENTER CAN_TxRx------");
 
+      // await semaphoreSlim.wait();
       print("[INFO] Semaphore acquired at ${DateTime.now()}");
 
       logs.add(SessionLogsModel(header: "Tx", message: txdata));
@@ -659,10 +661,10 @@ class DongleComm {
 
       return responseStructure;
     } finally {
+      // semaphoreSlim.release();
       print("[INFO] Semaphore released at ${DateTime.now()}");
       print("------EXIT CAN_TxRx------");
     }
-    }); // end _lock.synchronized
   }
 
   String byteArrayToHex(Uint8List bytes) {
@@ -1190,9 +1192,9 @@ class DongleComm {
 
   Future<Uint8List?> canStartTP() async {
     print("------CAN_StartTP------");
-    if (comm!.connectivity.value == Connectivity.usb ||
-        comm!.connectivity.value == Connectivity.wiFi ||
-        comm!.connectivity.value == Connectivity.ble) {
+    if (comm!.connectivity == Connectivity.usb ||
+        comm!.connectivity == Connectivity.wiFi ||
+        comm!.connectivity == Connectivity.ble) {
       String command = "";
       List<int> checksumBytes;
       if (isChannel) {
@@ -1230,7 +1232,7 @@ class DongleComm {
 
   Future<Uint8List?> canStopTP() async {
     print("------CAN_StopTP------");
-    final currentConn = comm!.connectivity.value;
+    final currentConn = comm!.connectivity;
     if (currentConn == Connectivity.usb ||
         currentConn == Connectivity.wiFi ||
         currentConn == Connectivity.ble) {
