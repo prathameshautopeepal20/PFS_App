@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
@@ -129,6 +130,14 @@ class HomePageController extends GetxController {
   bool _isAfterFlashEventSubscribed = false;
   Timer? _waitTimer;
 
+  // ── Auto ECU Detection ────────────────────────────────────
+  Timer?          _autoScanTimer;
+  final RxBool    isAutoScanning      = false.obs;
+  final RxString  autoScanStatus      = ''.obs;
+  final RxInt     donglesFoundCount   = 0.obs;
+  final RxBool    autoDetectEnabled   = true.obs; // user can toggle off
+
+
   @override
   void onInit() {
     super.onInit();
@@ -147,7 +156,11 @@ class HomePageController extends GetxController {
     _downCalFileUrl   = args['downCalFileUrl']   ?? '';
     _profile          = args['profile'] as Map<String,dynamic>?;
     _token            = args['token'] ?? '';
-    _init();
+    _init().then((_) {
+      // Start auto ECU detection AFTER page init completes
+      // so tableInfo is populated with registered dongles
+      _startAutoScan();
+    });
   }
 
   // ─────────────────────────────────────────────────────────
@@ -992,10 +1005,9 @@ class HomePageController extends GetxController {
     if (device.flashingSuccess) {
       try {
         print('📖 [ECU${device.index}] Post-flash reads starting...');
-        // .NET: Thread.Sleep(3000) — ECU reboots after flash
-        // Increased slightly to 4s for extra margin — logs showed the
-        // ECU's diagnostic services (CalID/CVN PIDs) weren't always
-        // ready at exactly 3s after a real flash+reset.
+        // ECU resets after flash (1101 command). Both the ECU and the
+        // dongle need time to re-establish the CAN link before accepting
+        // new socket connections. Start with 4s then retry up to 3x.
         await Future.delayed(const Duration(seconds: 4));
 
         await _wifi.clearBuffer(device.index);
@@ -1005,15 +1017,34 @@ class HomePageController extends GetxController {
         final rawTx  = ecuSub?.txHeader ?? '';
         final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
 
-        // Re-connect dongle (safe — flash is completely done for ALL ECUs)
-        await _wifi.checkDongle(
-          device.ipAddress,
-          device.index,
-          txHeader:     txHdr,
-          rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
-          protocolHex:  ecuSub?.protocolAutopeepal ?? '02',
-        );
-        await Future.delayed(const Duration(milliseconds: 100));
+        // Re-connect dongle with retry — SocketException "connection refused"
+        // is normal for 2-5s after ECU reset as the dongle re-initialises.
+        bool dongleReady = false;
+        for (int attempt = 1; attempt <= 4; attempt++) {
+          try {
+            await _wifi.checkDongle(
+              device.ipAddress,
+              device.index,
+              txHeader:     txHdr,
+              rxHeaderMask: ecuSub?.rxHeader ?? '7E8',
+              protocolHex:  ecuSub?.protocolAutopeepal ?? '02',
+            );
+            dongleReady = true;
+            print('✅ [ECU${device.index}] Dongle reconnected (attempt $attempt)');
+            break;
+          } catch (e) {
+            print('⚠️ [ECU${device.index}] Dongle reconnect attempt $attempt failed: $e');
+            if (attempt < 4) await Future.delayed(const Duration(seconds: 2));
+          }
+        }
+
+        if (!dongleReady) {
+          print('❌ [ECU${device.index}] Dongle not reachable after 4 attempts — skipping PID reads');
+          await _generatePdfAndPost(device, true);
+          return;
+        }
+
+        await Future.delayed(const Duration(milliseconds: 200));
 
         // Read SW version (after flash) — read ONCE here only
         final swPid = _getPidByType('ESWV');
@@ -1128,7 +1159,35 @@ class HomePageController extends GetxController {
       final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
 
       // .NET: flashing = await wifi.StartECUFlashing(seq_file, json_file, model, index)
-      final result = await _wifi.startECUFlashing(
+      // Retry up to 2 times on dongle timeout/disconnect — WiFi can drop
+      // momentarily during large binary transfers (the 0.5–1.5 MB hex block)
+      String result = 'FAIL';
+      const retryableErrors = ['No Resp From Dongle', 'NORESPONSEFROMECU',
+          'Dongle disconnected', 'timeout'];
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        if (attempt > 1) {
+          print('🔄 [ECU${device.index}] Flash attempt $attempt — reconnecting dongle...');
+          device.progress     = 0;
+          device.flashPercent = '0.0 %';
+          device.statusColor  = _cYellow;
+          tableInfo.refresh();
+          await Future.delayed(const Duration(seconds: 3));
+          try {
+            await _wifi.checkDongle(
+              device.ipAddress, device.index,
+              txHeader:     ecuSub?.txHeader           ?? '7E0',
+              rxHeaderMask: ecuSub?.rxHeader           ?? '7E8',
+              protocolHex:  ecuSub?.protocolAutopeepal ?? '02',
+            );
+            print('✅ [ECU${device.index}] Dongle reconnected for retry');
+          } catch (e) {
+            print('❌ [ECU${device.index}] Dongle reconnect failed: $e — aborting retry');
+            break;
+          }
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+
+        result = await _wifi.startECUFlashing(
         ip:             device.ipAddress,
         index:          device.index,
         seqFileContent: device.seqFile,
@@ -1161,6 +1220,16 @@ class HomePageController extends GetxController {
         },
         onStatus:       (s) { currStatus.value = s; },
       );
+
+        print('📋 [ECU${device.index}] Flash attempt $attempt result: $result');
+        if (result == 'NOERROR') break; // success — no retry needed
+        final shouldRetry = retryableErrors.any(
+            (e) => result.toLowerCase().contains(e.toLowerCase()));
+        if (!shouldRetry) break; // non-retryable error — don't retry
+        if (attempt < 2) {
+          print('⚠️ [ECU${device.index}] Retryable error: $result — will retry...');
+        }
+      } // end retry loop
 
       device.reportColor = _cYellow;
 
@@ -1540,8 +1609,123 @@ class HomePageController extends GetxController {
   };
 
   @override
+  // ════════════════════════════════════════════════════════════
+  //  AUTO ECU DETECTION
+  //  Scans for registered dongles every 3 seconds on page load.
+  //  When all expected dongles respond on port 6888:
+  //    1. Vibrate/sound alert to notify operator
+  //    2. Auto-trigger checkEcuStatus() — no button press needed
+  //    3. Stop scanning (resume if ECU disconnects)
+  //  Operator can toggle off via autoDetectEnabled.
+  // ════════════════════════════════════════════════════════════
+  void _startAutoScan() {
+    _autoScanTimer?.cancel();
+    if (!autoDetectEnabled.value) return;
+    if (tableInfo.isEmpty) return;
+
+    print('🔍 Auto ECU Detection started — watching ${tableInfo.length} dongle(s)');
+    Future.microtask(() {
+      autoScanStatus.value       = 'Waiting for ECU...';
+      isAutoScanning.value       = true;
+      checkEcuStatusButton.value = false; // hide button — auto scan is in control
+    });
+
+    _autoScanTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      await _autoScanTick();
+    });
+  }
+
+  Future<void> _autoScanTick() async {
+    if (tableInfo.any((x) => x.isflashing)) return;
+    if (!startFlashButtonDisable.value && tableInfo.any((x) => x.isEcuAvailable)) {
+      _stopAutoScan();
+      return;
+    }
+
+    try {
+      final subnet = await _getWifiSubnet();
+      if (subnet == null) {
+        Future.microtask(() => autoScanStatus.value = 'WiFi not connected');
+        return;
+      }
+
+      int found = 0;
+      final List<String> expectedIPs = tableInfo.map((d) => d.ipAddress).toList();
+      final results = await Future.wait(
+        expectedIPs.map((ip) => _tryPort(ip, 6888)),
+      );
+      for (final r in results) { if (r != null) found++; }
+      final total = expectedIPs.length;
+
+      Future.microtask(() {
+        if (!autoDetectEnabled.value) return;
+        donglesFoundCount.value = found;
+        if (found == 0) {
+          autoScanStatus.value = 'Scanning... no dongles found';
+        } else if (found < total) {
+          autoScanStatus.value = '$found/$total dongles — waiting...';
+        } else {
+          autoScanStatus.value = 'All $total dongle(s) detected!';
+        }
+      });
+
+      if (found == total && total > 0) {
+        print('🎉 Auto Detection: All $total dongles found — triggering checkEcuStatus');
+        await _alertOperator();
+
+        _autoScanTimer?.cancel();
+        _autoScanTimer = null;
+
+        Future.microtask(() {
+          isAutoScanning.value       = false;
+          autoScanStatus.value       = '';
+          checkEcuStatusButton.value = false; // keep hidden during check
+        });
+
+        await checkEcuStatus();
+        // After check done — restart scan, button stays hidden (scan is in control)
+        Future.delayed(const Duration(seconds: 5), _startAutoScan);
+      }
+    } catch (e) {
+      print('❌ _autoScanTick: $e');
+    }
+  }
+
+  Future<void> _alertOperator() async {
+    try {
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 200));
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 200));
+      HapticFeedback.heavyImpact();
+    } catch (_) {}
+    print('🔔 [Auto Detection] ECU connected — operator alerted');
+  }
+
+  void _stopAutoScan() {
+    _autoScanTimer?.cancel();
+    _autoScanTimer = null;
+    Future.microtask(() {
+      isAutoScanning.value       = false;
+      autoScanStatus.value       = '';
+      checkEcuStatusButton.value = true; // restore button when scan fully stops
+    });
+  }
+
+  void toggleAutoDetect() {
+    autoDetectEnabled.value = !autoDetectEnabled.value;
+    if (autoDetectEnabled.value) {
+      _startAutoScan();
+    } else {
+      _stopAutoScan();
+      Future.microtask(() => autoScanStatus.value = 'Auto-detect OFF');
+    }
+  }
+
+  @override
   void onClose() {
     _waitTimer?.cancel();
+    _autoScanTimer?.cancel();
     _wifi.closeSockets();
     super.onClose();
   }

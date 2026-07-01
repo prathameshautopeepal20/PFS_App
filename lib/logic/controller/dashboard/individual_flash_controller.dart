@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -88,9 +89,13 @@ class IndividualFlashController extends GetxController {
   final RxBool   showAlertPopup  = false.obs;
   final RxString popupMessage    = ''.obs;
 
-  // .NET: CheckEcuStatusButton = true in constructor, stays true always
-  // Button is NEVER disabled in .NET during check — always tappable
-  final RxBool checkEcuStatusButton = true.obs;
+  // Hide button while auto scanning — prevents manual interference
+  final RxBool checkEcuStatusButton = false.obs;
+
+  // Auto scan
+  Timer?         _autoScanTimer;
+  final RxBool   isAutoScanning  = false.obs;
+  final RxString autoScanStatus  = ''.obs;
 
   Map<String, dynamic>? _profile;
   String        _token     = '';
@@ -132,6 +137,8 @@ class IndividualFlashController extends GetxController {
       await _getPidList();
       await _downloadAndGenerateFiles();
       await _wifi.initSockets();
+      // Start auto ECU detection after page init — same as batch
+      _startAutoScan();
     } finally {
       isLoading.value = false;
     }
@@ -973,6 +980,95 @@ class IndividualFlashController extends GetxController {
     'Authorization': 'JWT $_token',
   };
 
+  // ══════════════════════════════════════════════════════════
+  //  AUTO ECU DETECTION — same as batch screen
+  //  Button hidden while scanning to prevent operator interference
+  // ══════════════════════════════════════════════════════════
+  void _startAutoScan() {
+    _autoScanTimer?.cancel();
+    if (tableInfo.isEmpty) return;
+    print('🔍 [Individual] Auto ECU Detection started — ${tableInfo.length} dongle(s)');
+    Future.microtask(() {
+      autoScanStatus.value       = 'Waiting for ECU...';
+      isAutoScanning.value       = true;
+      checkEcuStatusButton.value = false; // hide button during scan
+    });
+    _autoScanTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      await _autoScanTick();
+    });
+  }
+
+  Future<void> _autoScanTick() async {
+    // Don't scan while flashing
+    if (tableInfo.any((x) => x.isflashing)) return;
+    // Stop scan if ECUs already ready
+    if (tableInfo.any((x) => x.isEcuAvailable && !x.playButtonDisable)) {
+      _stopAutoScan();
+      return;
+    }
+    try {
+      final expectedIPs = tableInfo.map((d) => d.ipAddress).toList();
+      int found = 0;
+      final results = await Future.wait(
+        expectedIPs.map((ip) => _tryConnect(ip, 6888)),
+      );
+      for (final r in results) { if (r) found++; }
+      final total = expectedIPs.length;
+
+      Future.microtask(() {
+        if (found == 0) {
+          autoScanStatus.value = 'Scanning... no dongles found';
+        } else if (found < total) {
+          autoScanStatus.value = '$found/$total dongles found — waiting...';
+        } else {
+          autoScanStatus.value = '✅ All $total dongle(s) detected!';
+        }
+      });
+
+      if (found == total && total > 0) {
+        print('🎉 [Individual] All $total dongles found — triggering checkEcuStatus');
+        _autoScanTimer?.cancel();
+        _autoScanTimer = null;
+        Future.microtask(() {
+          isAutoScanning.value = false;
+          autoScanStatus.value = '';
+          // Keep button hidden during the check itself
+          checkEcuStatusButton.value = false;
+        });
+        await checkEcuStatus();
+        // After check completes — show button so operator can manually recheck
+        Future.microtask(() => checkEcuStatusButton.value = true);
+        // Restart scan after 5s in case ECU is swapped
+        Future.delayed(const Duration(seconds: 5), _startAutoScan);
+      }
+    } catch (e) {
+      print('❌ [Individual] _autoScanTick: $e');
+    }
+  }
+
+  Future<bool> _tryConnect(String ip, int port) async {
+    try {
+      final s = await Socket.connect(
+        ip, port, timeout: const Duration(milliseconds: 400));
+      s.destroy();
+      return true;
+    } catch (_) { return false; }
+  }
+
+  void _stopAutoScan() {
+    _autoScanTimer?.cancel();
+    _autoScanTimer = null;
+    Future.microtask(() {
+      isAutoScanning.value       = false;
+      autoScanStatus.value       = '';
+      checkEcuStatusButton.value = true; // show button when scan stops
+    });
+  }
+
   @override
-  void onClose() { _wifi.closeSockets(); super.onClose(); }
+  void onClose() {
+    _autoScanTimer?.cancel();
+    _wifi.closeSockets();
+    super.onClose();
+  }
 }

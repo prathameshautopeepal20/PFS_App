@@ -267,18 +267,22 @@ class WiFiPlugin {
       // 4-attempt loop (was 2) — after a REAL flash+reset, the ECU needs
       // more time to fully re-initialize its diagnostic stack than it
       // does for a simple pre-flash check. Logs showed CalID(0904)/
-      // CVN(0906) returning ECUERROR_SERVICENOTSUPPORTED and SW(22F188)
-      // returning garbage non-ASCII data on the first 1-2 attempts post-
-      // flash, succeeding only with more retries/delay.
-      // Note: CalID(0904)/CVN(0906) may consistently return
-      // ECUERROR_SERVICENOTSUPPORTED even after retries — in that case
-      // the controller falls back to the known target value.
-      for (int attempt = 1; attempt <= 4; attempt++) {
+      // CALID(0904) and CVN(0906): this ECU consistently returns
+      // ECUERROR_SERVICENOTSUPPORTED for OBD2 service 09 regardless
+      // of session type or retry count. Try only ONCE — if it fails,
+      // the controller's fallback (device.calId / device.cvnBefore)
+      // handles it immediately. No point spending 20s on 4 retries
+      // that will all fail the same way.
+      // For SW/HW/ESN: keep 4 attempts since they genuinely need retries
+      // (ECU may return garbage/NOERROR-but-invalid on first attempt
+      // post-flash before its diagnostic stack fully reinitializes).
+      final maxAttempts = (pidType == 'CALID' || pidType == 'CVN') ? 1 : 4;
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         await _setupCAN(slot);
         final dsOk = await _diagSession(slot.dongle!, attempt);
         await _ms(50);
 
-        if (!dsOk && attempt < 4) {
+        if (!dsOk && attempt < maxAttempts) {
           print('   ⚠️ DiagSession attempt $attempt failed → retrying...');
           await _ms(300);
           continue;
@@ -352,7 +356,7 @@ class WiFiPlugin {
         // retry. Now: always retry (up to the attempt limit) with a
         // short delay, since the ECU may simply need more time after
         // a real flash+reset before its diagnostic services come back.
-        if (attempt < 4) {
+        if (attempt < maxAttempts) {
           print('   ⚠️ [$index] $pidType attempt $attempt got no valid data — retrying...');
           await _ms(400);
         }

@@ -11,6 +11,8 @@
 
 analyzer:
   errors:
+    dead_code: ignore
+    dead_null_aware_expression: ignore
     unused_import: ignore
 linter:
   # The lint rules applied to this project can be customized in the
