@@ -91,7 +91,7 @@ class EcuSubmodel {
     this.rxHeader = '7E8',
     this.protocolName = 'ISO15765_500KB_11BIT_CAN',
     this.protocolAutopeepal = '02',
-    this.seedkeyAlgoValue = 'RE_SEEDKEY_EPM44',
+    this.seedkeyAlgoValue = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -105,15 +105,14 @@ class EcuSubmodel {
   };
 
   factory EcuSubmodel.fromJson(Map<String, dynamic> j) {
-    final ecuObj = j['ecu'];
-    final rawSeedkey = (ecuObj is Map) ? ecuObj['seedkeyalgo_fn_index'] : null;
-    print('🔑🔑🔑 RAW = ' + rawSeedkey.toString());
-    final seedVal =
-        (rawSeedkey is Map
-            ? rawSeedkey['value']?.toString()
-            : rawSeedkey?.toString()) ??
-        'RE_SEEDKEY_M4C';
-    print('🔑🔑🔑 RESOLVED = ' + seedVal);
+  final ecuObj = j['ecu'];
+  final rawSeedkey = (ecuObj is Map) ? ecuObj['seedkeyalgo_fn_index'] : null;
+  print('🔑🔑🔑 RAW = ' + rawSeedkey.toString());
+  final seedVal =
+      (rawSeedkey is Map
+          ? rawSeedkey['value']?.toString()
+          : rawSeedkey?.toString()) ?? '';   // ← empty string, no hardcode
+  print('🔑🔑🔑 RESOLVED = ' + seedVal);
 
     final ecuMap = ecuObj is Map ? ecuObj as Map<String, dynamic> : null;
     final protocol = ecuMap?['protocol'];

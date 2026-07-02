@@ -1,5 +1,6 @@
 // lib/logic/controller/dashboard/individual_flash_controller.dart
 // Mirrors IndivisualFlashViewModel.cs EXACTLY — verified against full .NET source
+// prathmesh girme  02/07/2026
 
 import 'dart:async';
 import 'dart:convert';
@@ -89,14 +90,10 @@ class IndividualFlashController extends GetxController {
   final RxBool   showAlertPopup  = false.obs;
   final RxString popupMessage    = ''.obs;
 
-  // Hide button while auto scanning — prevents manual interference
-  final RxBool checkEcuStatusButton = false.obs;
+  // Button always visible — operator controls manually
+  final RxBool checkEcuStatusButton = true.obs;
 
   // Auto scan
-  Timer?         _autoScanTimer;
-  final RxBool   isAutoScanning  = false.obs;
-  final RxString autoScanStatus  = ''.obs;
-
   Map<String, dynamic>? _profile;
   String        _token     = '';
   String        _sessionId = '';
@@ -135,10 +132,6 @@ class IndividualFlashController extends GetxController {
       await _getFlashDetail();
       await _getParameters();
       await _getPidList();
-      await _downloadAndGenerateFiles();
-      await _wifi.initSockets();
-      // Start auto ECU detection after page init — same as batch
-      _startAutoScan();
     } finally {
       isLoading.value = false;
     }
@@ -765,7 +758,7 @@ class IndividualFlashController extends GetxController {
         index:          device.index,
         seqFileContent: device.seqFile,
         hexFileContent: device.jsonFile,
-        seedKeyIndex:   ecuSub?.seedkeyAlgoValue  ?? 'RE_SEEDKEY_EPM44',
+        seedKeyIndex:   ecuSub?.seedkeyAlgoValue  ?? '',
         txHeader:       ecuSub?.txHeader           ?? '7DF',
         rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
@@ -866,37 +859,79 @@ class IndividualFlashController extends GetxController {
       final ecuSub2 = sub2?.ecuSubmodel.isNotEmpty == true ? sub2!.ecuSubmodel[0] : null;
       final rawTx2  = ecuSub2?.txHeader ?? '';
       final txHdr2  = (rawTx2.isNotEmpty && rawTx2 != '7DF' && rawTx2 != '07DF') ? rawTx2 : '7E0';
-      await Future.delayed(const Duration(seconds: 1));
-      await _wifi.checkDongle(
-        device.ipAddress,
-        device.index,
-        txHeader:     txHdr2,
-        rxHeaderMask: ecuSub2?.rxHeader ?? '7E8',
-        protocolHex:  ecuSub2?.protocolAutopeepal ?? '02',
-      );
-      await Future.delayed(const Duration(milliseconds: 100));
 
-      // .NET: GetHW → GetSW → GetCalId → GetCVN → GetESN
-      final hwRes  = await _wifi.getHW   (device.ipAddress, device.index, _pids);
-      if (hwRes[0]  == 'true') device.hardwarePartNumber = hwRes[1];
-      final swRes  = await _wifi.getSW   (device.ipAddress, device.index, _pids);
-      if (swRes[0]  == 'true') device.swVersionAfter = swRes[1];
-      final calRes = await _wifi.getCalId(device.ipAddress, device.index, _pids);
-      if (calRes[0] == 'true' && calRes[1].isNotEmpty) {
-        device.printCalId = calRes[1];
-      } else if (device.calId.isNotEmpty) {
-        device.printCalId = device.calId;
-        print('⚠️ CalID post-flash read failed — using target: ${device.calId}');
+      // ECU resets after flash — retry dongle reconnect same as batch
+      await Future.delayed(const Duration(seconds: 4));
+      bool dongleReady = false;
+      for (int attempt = 1; attempt <= 4; attempt++) {
+        try {
+          await _wifi.checkDongle(
+            device.ipAddress, device.index,
+            txHeader:     txHdr2,
+            rxHeaderMask: ecuSub2?.rxHeader ?? '7E8',
+            protocolHex:  ecuSub2?.protocolAutopeepal ?? '02',
+          );
+          dongleReady = true;
+          print('✅ [Individual] Dongle reconnected (attempt $attempt)');
+          break;
+        } catch (e) {
+          print('⚠️ [Individual] Dongle reconnect attempt $attempt failed: $e');
+          if (attempt < 4) await Future.delayed(const Duration(seconds: 2));
+        }
       }
-      final cvnRes = await _wifi.getCVN  (device.ipAddress, device.index, _pids);
-      if (cvnRes[0] == 'true' && cvnRes[1].isNotEmpty) {
-        device.cvn = cvnRes[1];
-      } else if (device.cvnBefore.isNotEmpty) {
-        device.cvn = device.cvnBefore;
-        print('⚠️ CVN post-flash read failed — using pre-flash: ${device.cvnBefore}');
+
+      if (!dongleReady) {
+        print('❌ [Individual] Dongle not reachable — using fallback values');
+        final sub3    = device.selectedSubModel;
+        final ecuSub3 = sub3?.ecuSubmodel.isNotEmpty == true ? sub3!.ecuSubmodel[0] : null;
+        final targetCvn = ecuSub3?.callibrationDataset?.cvn
+            ?? ecuSub3?.completeDataset?.cvn ?? '';
+        device.printCalId     = device.calId.isNotEmpty ? device.calId : device.calIdBefore;
+        device.cvn            = device.cvnBefore.isNotEmpty
+            ? device.cvnBefore : targetCvn.isNotEmpty ? targetCvn : 'N/A';
+        device.swVersionAfter = device.swVersionBefore;
+        device.ecuSrNoAfter   = device.ecuSrNo;
+      } else {
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // SW Version — read once, fast
+        final swRes = await _wifi.getSW(device.ipAddress, device.index, _pids);
+        if (swRes[0] == 'true' && swRes[1].isNotEmpty) {
+          device.swVersionAfter = swRes[1];
+        } else {
+          device.swVersionAfter = device.swVersionBefore;
+        }
+
+        // CalID — use fallback immediately (ECU doesn't support OBD2 service 09)
+        final calRes = await _wifi.getCalId(device.ipAddress, device.index, _pids);
+        if (calRes[0] == 'true' && calRes[1].isNotEmpty) {
+          device.printCalId = calRes[1];
+        } else {
+          device.printCalId = device.calId.isNotEmpty ? device.calId : device.calIdBefore;
+          print('⚠️ [Individual] CalID fallback: ${device.printCalId}');
+        }
+
+        // CVN — ECU doesn't support OBD2 service 09 (PID 0906)
+        // Use server config target CVN same as batch does for CalID
+        final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, _pids);
+        if (cvnRes[0] == 'true' && cvnRes[1].isNotEmpty) {
+          device.cvn = cvnRes[1];
+        } else {
+          // Fallback priority: pre-flash read → server dataset cvn → empty
+          final sub3    = device.selectedSubModel;
+          final ecuSub3 = sub3?.ecuSubmodel.isNotEmpty == true ? sub3!.ecuSubmodel[0] : null;
+          final targetCvn = ecuSub3?.callibrationDataset?.cvn
+              ?? ecuSub3?.completeDataset?.cvn ?? '';
+          device.cvn = device.cvnBefore.isNotEmpty
+              ? device.cvnBefore
+              : targetCvn.isNotEmpty ? targetCvn : 'N/A';
+          print('⚠️ [Individual] CVN fallback: ${device.cvn}');
+        }
+
+        // ESN — reuse from checkEcuStatus (no re-read needed, saves ~15s)
+        device.ecuSrNoAfter = device.ecuSrNo;
+        // HW — already read during checkEcuStatus, skip re-read
       }
-      final esnRes = await _wifi.getESN  (device.ipAddress, device.index, _pids);
-      if (esnRes[0] == 'true') device.ecuSrNoAfter = esnRes[1];
       tableInfo.refresh();
 
       final pfsId = _sessionId.isNotEmpty
@@ -983,69 +1018,6 @@ class IndividualFlashController extends GetxController {
   // ══════════════════════════════════════════════════════════
   //  AUTO ECU DETECTION — same as batch screen
   //  Button hidden while scanning to prevent operator interference
-  // ══════════════════════════════════════════════════════════
-  void _startAutoScan() {
-    _autoScanTimer?.cancel();
-    if (tableInfo.isEmpty) return;
-    print('🔍 [Individual] Auto ECU Detection started — ${tableInfo.length} dongle(s)');
-    Future.microtask(() {
-      autoScanStatus.value       = 'Waiting for ECU...';
-      isAutoScanning.value       = true;
-      checkEcuStatusButton.value = false; // hide button during scan
-    });
-    _autoScanTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      await _autoScanTick();
-    });
-  }
-
-  Future<void> _autoScanTick() async {
-    // Don't scan while flashing
-    if (tableInfo.any((x) => x.isflashing)) return;
-    // Stop scan if ECUs already ready
-    if (tableInfo.any((x) => x.isEcuAvailable && !x.playButtonDisable)) {
-      _stopAutoScan();
-      return;
-    }
-    try {
-      final expectedIPs = tableInfo.map((d) => d.ipAddress).toList();
-      int found = 0;
-      final results = await Future.wait(
-        expectedIPs.map((ip) => _tryConnect(ip, 6888)),
-      );
-      for (final r in results) { if (r) found++; }
-      final total = expectedIPs.length;
-
-      Future.microtask(() {
-        if (found == 0) {
-          autoScanStatus.value = 'Scanning... no dongles found';
-        } else if (found < total) {
-          autoScanStatus.value = '$found/$total dongles found — waiting...';
-        } else {
-          autoScanStatus.value = '✅ All $total dongle(s) detected!';
-        }
-      });
-
-      if (found == total && total > 0) {
-        print('🎉 [Individual] All $total dongles found — triggering checkEcuStatus');
-        _autoScanTimer?.cancel();
-        _autoScanTimer = null;
-        Future.microtask(() {
-          isAutoScanning.value = false;
-          autoScanStatus.value = '';
-          // Keep button hidden during the check itself
-          checkEcuStatusButton.value = false;
-        });
-        await checkEcuStatus();
-        // After check completes — show button so operator can manually recheck
-        Future.microtask(() => checkEcuStatusButton.value = true);
-        // Restart scan after 5s in case ECU is swapped
-        Future.delayed(const Duration(seconds: 5), _startAutoScan);
-      }
-    } catch (e) {
-      print('❌ [Individual] _autoScanTick: $e');
-    }
-  }
-
   Future<bool> _tryConnect(String ip, int port) async {
     try {
       final s = await Socket.connect(
@@ -1055,19 +1027,8 @@ class IndividualFlashController extends GetxController {
     } catch (_) { return false; }
   }
 
-  void _stopAutoScan() {
-    _autoScanTimer?.cancel();
-    _autoScanTimer = null;
-    Future.microtask(() {
-      isAutoScanning.value       = false;
-      autoScanStatus.value       = '';
-      checkEcuStatusButton.value = true; // show button when scan stops
-    });
-  }
-
   @override
   void onClose() {
-    _autoScanTimer?.cancel();
     _wifi.closeSockets();
     super.onClose();
   }

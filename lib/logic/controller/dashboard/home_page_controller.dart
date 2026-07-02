@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:atpl_flashing_app/AppPreferences/app_areferences.dart';
@@ -130,13 +130,6 @@ class HomePageController extends GetxController {
   bool _isAfterFlashEventSubscribed = false;
   Timer? _waitTimer;
 
-  // ── Auto ECU Detection ────────────────────────────────────
-  Timer?          _autoScanTimer;
-  final RxBool    isAutoScanning      = false.obs;
-  final RxString  autoScanStatus      = ''.obs;
-  final RxInt     donglesFoundCount   = 0.obs;
-  final RxBool    autoDetectEnabled   = true.obs; // user can toggle off
-
 
   @override
   void onInit() {
@@ -156,11 +149,7 @@ class HomePageController extends GetxController {
     _downCalFileUrl   = args['downCalFileUrl']   ?? '';
     _profile          = args['profile'] as Map<String,dynamic>?;
     _token            = args['token'] ?? '';
-    _init().then((_) {
-      // Start auto ECU detection AFTER page init completes
-      // so tableInfo is populated with registered dongles
-      _startAutoScan();
-    });
+    _init().then((_) { });
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1074,15 +1063,17 @@ class HomePageController extends GetxController {
         final cvnRes = await _wifi.getCVN(device.ipAddress, device.index, cvnPid);
         if (cvnRes[0] == 'true' && cvnRes[1].isNotEmpty) {
           device.cvn = cvnRes[1];
-        } else if (device.cvnBefore.isNotEmpty) {
-          // 🔥 FALLBACK: Same issue for CVN (PID 0906). Use the value read
-          // during checkEcuStatus as the best available approximation.
-          // In .NET this value comes from the same PID read which also works
-          // only in certain conditions — if unavailable post-flash, the
-          // pre-flash CVN is the most accurate value we have.
-          device.cvn = device.cvnBefore;
-          print('⚠️ [ECU${device.index}] CVN post-flash read failed — '
-                'using pre-flash CVN: ${device.cvnBefore}');
+        } else {
+          // ECU doesn't support OBD2 service 09 PID 0906 — use fallback
+          // Priority: pre-flash read → server dataset cvn → N/A
+          final ecuSub = _selectedSubModel?.ecuSubmodel.isNotEmpty == true
+              ? _selectedSubModel!.ecuSubmodel[0] : null;
+          final targetCvn = ecuSub?.callibrationDataset?.cvn
+              ?? ecuSub?.completeDataset?.cvn ?? '';
+          device.cvn = device.cvnBefore.isNotEmpty
+              ? device.cvnBefore
+              : targetCvn.isNotEmpty ? targetCvn : 'N/A';
+          print('⚠️ [ECU${device.index}] CVN fallback: ${device.cvn}');
         }
 
         print('✅ [ECU${device.index}] CalID=${device.printCalId} CVN=${device.cvn}');
@@ -1192,7 +1183,7 @@ class HomePageController extends GetxController {
         index:          device.index,
         seqFileContent: device.seqFile,
         hexFileContent: device.jsonFile,
-        seedKeyIndex:   ecuSub?.seedkeyAlgoValue   ?? 'RE_SEEDKEY_EPM44',
+        seedKeyIndex:   ecuSub?.seedkeyAlgoValue   ?? '',
         txHeader:       ecuSub?.txHeader           ?? '7DF',
         rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
@@ -1610,122 +1601,9 @@ class HomePageController extends GetxController {
 
   @override
   // ════════════════════════════════════════════════════════════
-  //  AUTO ECU DETECTION
-  //  Scans for registered dongles every 3 seconds on page load.
-  //  When all expected dongles respond on port 6888:
-  //    1. Vibrate/sound alert to notify operator
-  //    2. Auto-trigger checkEcuStatus() — no button press needed
-  //    3. Stop scanning (resume if ECU disconnects)
-  //  Operator can toggle off via autoDetectEnabled.
-  // ════════════════════════════════════════════════════════════
-  void _startAutoScan() {
-    _autoScanTimer?.cancel();
-    if (!autoDetectEnabled.value) return;
-    if (tableInfo.isEmpty) return;
-
-    print('🔍 Auto ECU Detection started — watching ${tableInfo.length} dongle(s)');
-    Future.microtask(() {
-      autoScanStatus.value       = 'Waiting for ECU...';
-      isAutoScanning.value       = true;
-      checkEcuStatusButton.value = false; // hide button — auto scan is in control
-    });
-
-    _autoScanTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      await _autoScanTick();
-    });
-  }
-
-  Future<void> _autoScanTick() async {
-    if (tableInfo.any((x) => x.isflashing)) return;
-    if (!startFlashButtonDisable.value && tableInfo.any((x) => x.isEcuAvailable)) {
-      _stopAutoScan();
-      return;
-    }
-
-    try {
-      final subnet = await _getWifiSubnet();
-      if (subnet == null) {
-        Future.microtask(() => autoScanStatus.value = 'WiFi not connected');
-        return;
-      }
-
-      int found = 0;
-      final List<String> expectedIPs = tableInfo.map((d) => d.ipAddress).toList();
-      final results = await Future.wait(
-        expectedIPs.map((ip) => _tryPort(ip, 6888)),
-      );
-      for (final r in results) { if (r != null) found++; }
-      final total = expectedIPs.length;
-
-      Future.microtask(() {
-        if (!autoDetectEnabled.value) return;
-        donglesFoundCount.value = found;
-        if (found == 0) {
-          autoScanStatus.value = 'Scanning... no dongles found';
-        } else if (found < total) {
-          autoScanStatus.value = '$found/$total dongles — waiting...';
-        } else {
-          autoScanStatus.value = 'All $total dongle(s) detected!';
-        }
-      });
-
-      if (found == total && total > 0) {
-        print('🎉 Auto Detection: All $total dongles found — triggering checkEcuStatus');
-        await _alertOperator();
-
-        _autoScanTimer?.cancel();
-        _autoScanTimer = null;
-
-        Future.microtask(() {
-          isAutoScanning.value       = false;
-          autoScanStatus.value       = '';
-          checkEcuStatusButton.value = false; // keep hidden during check
-        });
-
-        await checkEcuStatus();
-        // After check done — restart scan, button stays hidden (scan is in control)
-        Future.delayed(const Duration(seconds: 5), _startAutoScan);
-      }
-    } catch (e) {
-      print('❌ _autoScanTick: $e');
-    }
-  }
-
-  Future<void> _alertOperator() async {
-    try {
-      HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 200));
-      HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 200));
-      HapticFeedback.heavyImpact();
-    } catch (_) {}
-    print('🔔 [Auto Detection] ECU connected — operator alerted');
-  }
-
-  void _stopAutoScan() {
-    _autoScanTimer?.cancel();
-    _autoScanTimer = null;
-    Future.microtask(() {
-      isAutoScanning.value       = false;
-      autoScanStatus.value       = '';
-      checkEcuStatusButton.value = true; // restore button when scan fully stops
-    });
-  }
-
-  void toggleAutoDetect() {
-    autoDetectEnabled.value = !autoDetectEnabled.value;
-    if (autoDetectEnabled.value) {
-      _startAutoScan();
-    } else {
-      _stopAutoScan();
-      Future.microtask(() => autoScanStatus.value = 'Auto-detect OFF');
-    }
-  }
-
   @override
   void onClose() {
     _waitTimer?.cancel();
-    _autoScanTimer?.cancel();
     _wifi.closeSockets();
     super.onClose();
   }

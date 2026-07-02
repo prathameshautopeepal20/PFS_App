@@ -110,6 +110,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/new/
+    - assets/orange autopeepal logo.png
 
   fonts:
     - family: OpenSans-Regular

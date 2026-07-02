@@ -75,7 +75,6 @@ class IndividualFlashScreen extends StatelessWidget {
           CustomPaint(painter: _GridPainter(), child: const SizedBox.expand()),
           Column(children: [
             _ITopBar(controller: ctrl),
-            _IAutoScanBanner(controller: ctrl),
             const _ITableHeader(),
             Expanded(child: _ITableRows(controller: ctrl)),
             _IBottomBar(controller: ctrl),
@@ -178,50 +177,6 @@ class _IInfoCard extends StatelessWidget {
   }
 }
 
-// ── Auto scan status banner ──────────────────────────────────
-class _IAutoScanBanner extends StatelessWidget {
-  final IndividualFlashController controller;
-  const _IAutoScanBanner({required this.controller});
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final scanning = controller.isAutoScanning.value;
-      final status   = controller.autoScanStatus.value;
-      if (!scanning && status.isEmpty) return const SizedBox.shrink();
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: _surface,
-          border: const Border(bottom: BorderSide(color: _border))),
-        child: Row(children: [
-          if (scanning)
-            const SizedBox(width: 14, height: 14,
-              child: CircularProgressIndicator(color: _orange, strokeWidth: 2))
-          else
-            Container(
-              width: 10, height: 10,
-              decoration: const BoxDecoration(
-                color: _pass, shape: BoxShape.circle)),
-          const SizedBox(width: 10),
-          Expanded(child: Text(status,
-            style: const TextStyle(
-              color: _w60, fontSize: 11, fontWeight: FontWeight.w500))),
-          if (scanning)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: _orange.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _orange.withOpacity(0.4))),
-              child: const Text('AUTO SCANNING',
-                style: TextStyle(
-                  color: _orange, fontSize: 9,
-                  fontWeight: FontWeight.w900, letterSpacing: 0.8))),
-        ]),
-      );
-    });
-  }
-}
 class _ITableHeader extends StatelessWidget {
   const _ITableHeader();
   @override
@@ -794,16 +749,12 @@ class _IBottomBar extends StatelessWidget {
             : const SizedBox()),
 
         Row(children: [
-          Obx(() {
-            final visible = controller.checkEcuStatusButton.value;
-            if (!visible) return const SizedBox.shrink();
-            return _IActionBtn(
-              label: 'CHECK ECU STATUS',
-              icon: Icons.radar_rounded,
-              enabled: true,
-              gradient: _gBlue,
-              onTap: controller.checkEcuStatus);
-          }),
+          _IActionBtn(
+            label: 'CHECK ECU STATUS',
+            icon: Icons.radar_rounded,
+            enabled: true,
+            gradient: _gBlue,
+            onTap: controller.checkEcuStatus),
           const Spacer(),
           _IActionBtn(
             label: 'FLASH ALL',

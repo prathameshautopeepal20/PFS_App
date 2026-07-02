@@ -113,13 +113,13 @@ class _SplashScreenState extends State<SplashScreen>
 
                   // Logo
                   SizedBox(
-                    width: 110,
-                    height: 110,
+                    width: 250,
+                    height: 150,
                     child: Image.asset(
-                      'assets/new/autopeepal(1).png',
+                      'assets/orange autopeepal logo.png',
                       fit: BoxFit.contain)),
 
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 10),
 
                   // App name
                   ShaderMask(
