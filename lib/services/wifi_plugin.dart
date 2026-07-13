@@ -38,12 +38,7 @@ class WiFiPlugin {
   final Map<String, double> flashPercentMap = {};
 
   // ══════════════════════════════════════════════════════════════
-  // SEED KEY LOCK — CRITICAL for parallel flash on shared CAN bus
-  // Both dongles share ONE CAN bus. 2701/2702 must be sequential.
-  // If ECU1 and ECU2 both send 2701 simultaneously → collision →
-  // ECUERROR_SECURITYACCESSDENIED → flash fails.
-  // Static lock: only ONE flashInterpreter can do seed key at a time.
-  // After 2702 succeeds, lock releases → other ECU does its seed key.
+
   // Bulk data transfer runs in parallel after all seed keys complete.
   // ══════════════════════════════════════════════════════════════
   static final Lock _seedKeyLock = Lock();
@@ -212,11 +207,6 @@ class WiFiPlugin {
     }
   }
 
-  // ─────────────────────────────────────────────────────────
-  //  _readPid — mirrors .NET GetESN/GetHW/GetSW/GetCalId/GetCVN
-  //  2-attempt retry: attempt 1 may fail if ECU in programming
-  //  session from previous flash → attempt 2 recovers
-  // ─────────────────────────────────────────────────────────
   Future<List<String>> _readPid(int index, List<dynamic> rawPids,
       {String pidType = 'ESN'}) async {
     try {
@@ -264,18 +254,6 @@ class WiFiPlugin {
       print('   SA: ${_hex(saR)}');
       await _ms(50);
 
-      // 4-attempt loop (was 2) — after a REAL flash+reset, the ECU needs
-      // more time to fully re-initialize its diagnostic stack than it
-      // does for a simple pre-flash check. Logs showed CalID(0904)/
-      // CALID(0904) and CVN(0906): this ECU consistently returns
-      // ECUERROR_SERVICENOTSUPPORTED for OBD2 service 09 regardless
-      // of session type or retry count. Try only ONCE — if it fails,
-      // the controller's fallback (device.calId / device.cvnBefore)
-      // handles it immediately. No point spending 20s on 4 retries
-      // that will all fail the same way.
-      // For SW/HW/ESN: keep 4 attempts since they genuinely need retries
-      // (ECU may return garbage/NOERROR-but-invalid on first attempt
-      // post-flash before its diagnostic stack fully reinitializes).
       final maxAttempts = (pidType == 'CALID' || pidType == 'CVN') ? 1 : 4;
       for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         await _setupCAN(slot);
@@ -348,14 +326,7 @@ class WiFiPlugin {
           print('   resp: status=$status');
         }
 
-        // If we reach here, this attempt did not return valid data above.
-        // Previously this broke out as soon as dsOk was true, even if
-        // the PID read itself returned ECUERROR_SERVICENOTSUPPORTED or
-        // garbage data — meaning a successful diag session but a "not
-        // ready yet" ECU response was treated as final failure with NO
-        // retry. Now: always retry (up to the attempt limit) with a
-        // short delay, since the ECU may simply need more time after
-        // a real flash+reset before its diagnostic services come back.
+      
         if (attempt < maxAttempts) {
           print('   ⚠️ [$index] $pidType attempt $attempt got no valid data — retrying...');
           await _ms(400);
@@ -384,10 +355,7 @@ class WiFiPlugin {
   Future<List<String>> getCVN  (String ip, int i, List p) => _readPid(i, p, pidType: 'CVN');
 
   // ─────────────────────────────────────────────────────────
-  //  startECUFlashing — mirrors .NET StartECUFlashing()
-  //  .NET: CAN_StartTP → FlashInterpreter → CAN_StopTP
-  //  Both BATCH and INDIVIDUAL use this same method
-  //  Auto-reconnect if dongle drops mid-flash
+ 
   // ─────────────────────────────────────────────────────────
   Future<String> startECUFlashing({
     required String ip,
@@ -427,30 +395,11 @@ class WiFiPlugin {
         orElse: () => SEEDKEYINDEXTYPE.RE_SEEDKEY_EPM44,
       );
 
-      // ══════════════════════════════════════════════════════════
-      // 🎯 THE REAL FIX — TRUE PARALLEL VIA DART ISOLATE
-      //
-      // Root cause (confirmed from .NET source): .NET wraps each
-      // ECU's CAN_StartTP + FlashInterpreter + CAN_StopTP inside
-      // `await Task.Run(...)` — giving each ECU its own dedicated
-      // OS thread-pool thread. That's genuine OS-level parallelism.
-      //
-      // Dart's async/await is cooperative SINGLE-THREADED concurrency
-      // — no amount of restructuring (locks, staggering, yields) can
-      // replicate true thread-level isolation on the same thread.
-      // That fundamental gap was the actual root cause of the
-      // intermittent "one ECU silently fails" bug, not a logic bug.
-      //
-      // FIX: spawn a real Dart Isolate per ECU (see flash_isolate.dart).
-      // Each isolate creates its OWN socket/DongleComm/UDSDiagnostic
-      // chain internally and runs CAN_StartTP→flashInterpreter→
-      // CAN_StopTP completely independently on its own OS thread —
-      // this is Dart's actual equivalent of .NET's Task.Run.
+      
       // ══════════════════════════════════════════════════════════
       print('🧵 [$index] Spawning dedicated isolate for TRUE parallel flash...');
       // Close the main-isolate's existing connection first — the isolate
-      // will open its OWN fresh socket to the dongle, and most dongle
-      // firmware only accepts one active TCP session at a time.
+    
       try {
         await _slot.ctrl.disconnect();
       } catch (_) {}
@@ -561,9 +510,7 @@ class WiFiPlugin {
         }
       }
 
-      // Ensure enough sectors exist for all indices referenced in seq file
-      // seq file may reference sectorData[1], sectorData[2] etc.
-      // If fewer sectors created, add empty FF-padded dummy sectors
+    
       int maxRefIndex = 0;
       for (final raw in seqFile.split('\n')) {
         final matches = RegExp(r'(?:json_strt_addr|json_end_addr|ecu_memmap_strt_addr|ecu_memmap_end_addr)(\d+)').allMatches(raw);
@@ -613,10 +560,7 @@ class _AddrRange {
   _AddrRange(this.start, this.end);
 }
 
-// ── Top-level function for compute() isolate ──────────────────────────────
-// Must be top-level (not class method) for compute() to work.
-// Takes [seqFileContent, hexFileContent] as a list argument.
-// This runs in a separate OS thread via Flutter's compute() — true parallel!
+
 FlashingMatrixData? _srecToFlashingMatrixDataIsolate(List<String> args) {
   final seqFile  = args[0];
   final srecFile = args[1];
