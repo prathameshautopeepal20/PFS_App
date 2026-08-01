@@ -23,9 +23,6 @@ const _cWhite  = Color(0xFFFFFFFF);
 const _cYellow = Color(0xFFFFEB3B);
 const _cOrange = Color(0xFFF9772C);
 
-// ════════════════════════════════════════════════════════════
-//  TableInfoModel — mirrors .NET TableInfoModel
-// ════════════════════════════════════════════════════════════
 class TableInfoModel {
   int index; int srNo; String bgColor;
   String macId; String ipAddress; String status; int priority;
@@ -108,7 +105,7 @@ class HomePageController extends GetxController {
   ModelResult? get selectedModel    => _selectedModel;
   SubModel?    get selectedSubModel => _selectedSubModel;
 
-  // .NET observable properties
+  
   final RxBool   isLoading               = false.obs;
   final RxString currStatus              = ''.obs;
   final RxString title                   = ''.obs;
@@ -152,11 +149,6 @@ class HomePageController extends GetxController {
     _init().then((_) { });
   }
 
-  // ─────────────────────────────────────────────────────────
-  //  Init — mirrors .NET Init()
-  //  Order: GenerateJson → GetFlashDetail → GetParameters →
-  //         GetPid → ShowRegisteredDongleList
-  // ─────────────────────────────────────────────────────────
   Future<void> _init() async {
     isLoading.value = true;
     try {
@@ -185,9 +177,6 @@ class HomePageController extends GetxController {
     }
   }
 
-  // .NET: GenerateJson() — converts SREC files to JSON format
-  // In Flutter: files are already downloaded as raw content
-  // We store them directly (wifi_plugin converts SREC→FlashingMatrixData at flash time)
   Future<void> _generateJson() async {
     _downComJsonFile = _downComFile;   // already SREC content
     _downCalJsonFile = _downCalFile;
@@ -238,8 +227,7 @@ class HomePageController extends GetxController {
     } catch (e) { print('❌ _getPids: $e'); }
   }
 
-  // .NET: GetPid(string type) — find PID code by parameter type
-  // Searches parameters list → finds matching pid_code by dataset id
+
   List<dynamic> _getPidByType(String type) {
     try {
       if (_parameters.isEmpty || _pids.isEmpty) return _pids;
@@ -321,12 +309,7 @@ class HomePageController extends GetxController {
     } catch (e) { print('❌ _loadDongleList: $e'); }
   }
 
-  // ════════════════════════════════════════════════════════════
-  //  CHECK ECU STATUS — mirrors CheckEcuStatusCommand
-  //  .NET: CloseSockets → InitSockets → CheckDongle → CheckECU →
-  //        CheckECUHW → CheckFlashingStatus → CheckECUSW →
-  //        CheckCalId → CheckCVN (or GetCalId/GetCVN)
-  // ════════════════════════════════════════════════════════════
+  
   Future<void> checkEcuStatus() async {
     // 🔥 Guard: do NOT run during flashing — would kill active sockets
     if (tableInfo.any((x) => x.isflashing)) {
@@ -417,9 +400,6 @@ class HomePageController extends GetxController {
     }
   }
 
-  // ── CheckDongle — mirrors .NET CheckDongle() ─────────────
-  // .NET: foreach device → CheckDongle(ip, index) → Task.Delay(100)
-  // Returns true if ALL dongles found
   Future<bool> _checkDongle() async {
     currStatus.value = 'Checking Dongle Connection...';
     try {
@@ -472,8 +452,6 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckECU — mirrors .NET CheckECU() ───────────────────
-  // .NET: foreach → Task.Delay(10) → GetESN → check res[0]=="true"
   Future<bool> _checkECU() async {
     currStatus.value = 'Checking ECU Connection...';
     try {
@@ -516,8 +494,6 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckECUHW — mirrors .NET CheckECUHW() ───────────────
-  // .NET: GetHW → MatchHardwarePartNumber(complete_dataset, res[1])
   Future<bool> _checkECUHW() async {
     currStatus.value = 'Reading ECU Hardware Number...';
     try {
@@ -565,9 +541,6 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckECUSW — mirrors .NET CheckECUSW() ───────────────
-  // .NET: foreach → GetSW → MatchSoftwareVersion
-  // returns next_check (true if sw matched = need CalId/CVN check)
   Future<bool> _checkECUSW() async {
     currStatus.value = 'Reading Software Version...';
     _nextCheck = false;
@@ -591,14 +564,7 @@ class HomePageController extends GetxController {
           device.flashingAvailabel = false;
           device.swMatch           = true;
           _nextCheck               = true;
-          // 🔥 CRITICAL FIX: even when software already matches (no flash
-          // strictly "needed"), fileType was left at default 'NA' here.
-          // If this ECU later ends up in the `eligible` list (isEcuAvailable
-          // = true) for ANY reason — e.g. operator forces a re-flash, or
-          // batch flashing includes it regardless — _startFlash() would
-          // silently abort with empty jsonFile/seqFile and ZERO logging,
-          // showing Fail/0.0% with no visible cause. Always set a valid
-          // fileType so this can never happen silently again.
+         
           if (device.fileType == 'NA' || device.fileType.isEmpty) {
             device.fileType = 'Complete';
             print('⚠️ [ECU${device.index}] SW already matched but fileType was NA — '
@@ -627,9 +593,6 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckCalId — mirrors .NET CheckCalId() ───────────────
-  // .NET: only runs for devices where sw_match==true
-  // checks callibration_dataset first, then complete_dataset
   Future<bool> _checkCalId() async {
     currStatus.value = 'Reading Calibration Id...';
     _alreadyFlashedEcu = false;
@@ -710,8 +673,6 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── CheckCVN — mirrors .NET CheckCVN() ───────────────────
-  // .NET: only runs for devices where cal_id_match==true
   Future<bool> _checkCVN() async {
     currStatus.value = 'Reading CVN...';
     _nextCheck = false;
@@ -827,8 +788,7 @@ class HomePageController extends GetxController {
     } finally { currStatus.value = ''; }
   }
 
-  // ── _matchFromFiles — mirrors .NET MatchSoftwareVersion/MatchCalId/MatchCVN
-  // Looks up flash_record_files by dataset.sequence_file_name.id → dataset.id
+  
   String _matchFromFiles(dynamic dataset, String field) {
     try {
       if (dataset == null) return '';
@@ -845,12 +805,7 @@ class HomePageController extends GetxController {
     } catch (_) { return ''; }
   }
 
-  // ════════════════════════════════════════════════════════════
-  //  START FLASH — mirrors .NET StartFlashCommand
-  //  .NET: foreach item → if isEcuAvailable → new Thread(StartFlash).Start()
-  //  Flutter: Future.wait([_flashDevice(d1), _flashDevice(d2)])
-  //  BOTH run simultaneously — same as .NET Thread per ECU
-  // ════════════════════════════════════════════════════════════
+ 
   Future<void> startFlash() async {
     print('🚀🚀🚀 startFlash() CALLED — button click registered @ ${DateTime.now()}');
     if (startFlashButtonDisable.value) {
@@ -884,13 +839,7 @@ class HomePageController extends GetxController {
           item.seqFile  = _downCalSeqfile;
           item.fileUrl  = _downCalFileUrl;
         } else {
-          // 🔥 FIX: fileType was 'NA' or unexpected — none of the above
-          // branches matched, leaving jsonFile/seqFile EMPTY. This caused
-          // a SILENT early-return in _startFlash ("File not found") with
-          // ZERO logging — exactly the "ECU2 instantly fails at 0.0%,
-          // no flashInterpreter logs at all" symptom we were chasing.
-          // Fallback to Complete files so flashing can proceed, and log
-          // loudly so this is never invisible again.
+          
           print('⚠️ [ECU${item.index}] fileType was "${item.fileType}" '
                 '(expected Complete/Calibration) — falling back to Complete '
                 'files. jsonFile/seqFile would otherwise be EMPTY.');
@@ -913,31 +862,7 @@ class HomePageController extends GetxController {
       }
       _isAfterFlashEventSubscribed = false;
       tableInfo.refresh();
-
-      // PARALLEL FLASH
-      // Step 1: Pre-fetch calId/CVN sequentially (uses socket - must be sequential)
-      // Step 2: Start actual flash simultaneously via Future.wait
-      // Each ECU then uses its own socket/buffer/Completer - no interference
       final eligible = tableInfo.where((d) => d.isEcuAvailable).toList();
-
-      // Pre-flash reads removed — .NET does NOT pre-fetch before flash
-      // CalID/CVN "Before" values come from checkEcuStatus which runs on page load
-      // This eliminates the delay between button click and flash start
-
-      // ══════════════════════════════════════════════════════════
-      // PHASE 1: STAGGERED PARALLEL FLASH
-      //
-      // Pure simultaneous start (both ECUs hit the dongle/socket at
-      // literally the same millisecond) appears to trigger an
-      // intermittent failure in the SECOND-starting ECU that we
-      // could not isolate even across lock/no-lock/sequential modes.
-      // Fully sequential (no overlap at all) is 100% reliable but
-      // slow (~6 min). This staggers each ECU's start by a few
-      // seconds so their socket/dongle initialization never happens
-      // at the exact same instant, while still overlapping for the
-      // bulk of the flash duration — aiming for ~3-4 min total
-      // instead of ~6 min, without reintroducing the failure.
-      // ══════════════════════════════════════════════════════════
       _wifi.setFlashInProgress(true);
       try {
         final eligibleList = eligible.toList();
@@ -960,12 +885,6 @@ class HomePageController extends GetxController {
       _wifi.setFlashInProgress(false);
       print('✅ PHASE 1 COMPLETE — both ECUs finished flashing');
 
-      // ══════════════════════════════════════════════════════════
-      // PHASE 2: PARALLEL POST-FLASH READS
-      // Both ECUs are done flashing now — safe to run concurrently
-      // checkDongle for ECU1 and ECU2 run in parallel using own sockets
-      // Total extra time: ~30-60 sec (not 3-4 min sequential)
-      // ══════════════════════════════════════════════════════════
       print('📖 PHASE 2 — parallel post-flash reads for all ECUs');
       try {
         await Future.wait(
@@ -979,24 +898,11 @@ class HomePageController extends GetxController {
     } catch (e) { print('❌ startFlash: $e'); }
   }
 
-  // ── StartFlash — mirrors .NET StartFlash(selectedModel, index1) ──
-  // ══════════════════════════════════════════════════════════════════
-  // _postFlashLifecycle — runs AFTER both ECUs finish flashing
-  //
-  // Called from PHASE 2 Future.wait — both ECUs are done at this point
-  // Safe to run ECU1 and ECU2 post-reads concurrently because:
-  //   - No flash loop running → no S3 timer to expire
-  //   - Each ECU uses its own socket (slot 1 vs slot 2)
-  //   - checkDongle/connectWifi for ECU1 cannot starve ECU2 flash
-  //     (ECU2 flash is already DONE)
-  // ══════════════════════════════════════════════════════════════════
+
   Future<void> _postFlashLifecycle(TableInfoModel device) async {
     if (device.flashingSuccess) {
       try {
         print('📖 [ECU${device.index}] Post-flash reads starting...');
-        // ECU resets after flash (1101 command). Both the ECU and the
-        // dongle need time to re-establish the CAN link before accepting
-        // new socket connections. Start with 4s then retry up to 3x.
         await Future.delayed(const Duration(seconds: 4));
 
         await _wifi.clearBuffer(device.index);
@@ -1006,8 +912,7 @@ class HomePageController extends GetxController {
         final rawTx  = ecuSub?.txHeader ?? '';
         final txHdr  = (rawTx.isNotEmpty && rawTx != '7DF' && rawTx != '07DF') ? rawTx : '7E0';
 
-        // Re-connect dongle with retry — SocketException "connection refused"
-        // is normal for 2-5s after ECU reset as the dongle re-initialises.
+    
         bool dongleReady = false;
         for (int attempt = 1; attempt <= 4; attempt++) {
           try {
@@ -1048,11 +953,6 @@ class HomePageController extends GetxController {
         if (calRes[0] == 'true' && calRes[1].isNotEmpty) {
           device.printCalId = calRes[1];
         } else if (device.calId.isNotEmpty) {
-          // 🔥 FALLBACK: This ECU returns ECUERROR_SERVICENOTSUPPORTED for OBD2
-          // service 09 (PID 0904) after flash+reset regardless of session type.
-          // The target CalID is already known from the server config — use it
-          // as the "After" value since a successful flash guarantees the ECU
-          // now has the target calibration programmed.
           device.printCalId = device.calId;
           print('⚠️ [ECU${device.index}] CalID post-flash read failed — '
                 'using target CalID from config: ${device.calId}');
@@ -1129,13 +1029,6 @@ class HomePageController extends GetxController {
       // .NET: Stopwatch + timer(1s) + IsProgressVisivle=true
       final sw = Stopwatch()..start();
       timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        // OnTimedEvent — update clock every second.
-        // 🔥 Progress % is now updated live via the onProgress callback
-        // below, driven by SendPort messages from the flash Isolate —
-        // the old 5s polling of _wifi.getDiag(device.index) read a
-        // main-isolate UDSDiagnostic instance that's idle now that
-        // actual flashing happens inside a separate Isolate, so that
-        // polling was removed (it would always report 0%).
         device.flashTimer = '${sw.elapsed.inMinutes.toString().padLeft(2,'0')}:'
             '${(sw.elapsed.inSeconds%60).toString().padLeft(2,'0')}';
         tableInfo.refresh();
@@ -1148,10 +1041,6 @@ class HomePageController extends GetxController {
 
       final sub    = _selectedSubModel;
       final ecuSub = sub?.ecuSubmodel.isNotEmpty == true ? sub!.ecuSubmodel[0] : null;
-
-      // .NET: flashing = await wifi.StartECUFlashing(seq_file, json_file, model, index)
-      // Retry up to 2 times on dongle timeout/disconnect — WiFi can drop
-      // momentarily during large binary transfers (the 0.5–1.5 MB hex block)
       String result = 'FAIL';
       const retryableErrors = ['No Resp From Dongle', 'NORESPONSEFROMECU',
           'Dongle disconnected', 'timeout'];
@@ -1188,20 +1077,6 @@ class HomePageController extends GetxController {
         rxHeader:       ecuSub?.rxHeader           ?? '7E8',
         protocolHex:    ecuSub?.protocolAutopeepal ?? '02',
         onProgress:     (p) {
-          // 🔥 Now driven by live isolate progress messages (the flash
-          // itself runs in a separate Isolate for true parallelism) —
-          // update both the numeric progress and the displayed percent
-          // text, and refresh so GetX actually redraws the progress bar.
-          //
-          // CAP AT 99%: realTimeBytesFlashed/totalBytesToBeFlashed only
-          // tracks the BULK DATA transfer. After that hits 100% of actual
-          // firmware bytes sent, the seq file still runs several more
-          // real commands (37 transfer-exit, 3101ff01/02 routine checks,
-          // 2ef1.. write-data-by-id, 1101 ECU reset) that take real time
-          // AND can still fail. Showing 100% before those finish was
-          // confusing — it looked "done" then later failed. Cap the
-          // live bar at 99% and only show true 100% on confirmed final
-          // success below, once flashInterpreter has fully returned.
           final clamped = (p.clamp(0.0, 1.0)) * 0.99;
           if (clamped > device.progress) {
             device.progress     = clamped;
@@ -1223,10 +1098,6 @@ class HomePageController extends GetxController {
       } // end retry loop
 
       device.reportColor = _cYellow;
-
-      // 🔥 CRITICAL: Do NOT run any awaits here while other ECU is still flashing!
-      // Post-flash reads (checkDongle, getCalId, getCVN) are deferred to after
-      // Future.wait completes — same as .NET Thread isolation model.
       if (result == 'NOERROR') {
         device.flashingSuccess = true;
         device.statusColor     = _cGreen;
@@ -1242,9 +1113,6 @@ class HomePageController extends GetxController {
       if (device.status == 'Flashing completed') {
         device.flashPercent = '100.0%';
         device.progress     = 1.0;
-        // 🔥 Stop timer NOW — user sees Pass + 100% + frozen time.
-        // _postFlashLifecycle (PID reads) still runs after this but
-        // the displayed time is frozen at actual flash completion.
         timer?.cancel();
         timer = null;
         sw.stop();
@@ -1269,20 +1137,10 @@ class HomePageController extends GetxController {
     }
   }
 
-  // (removed unused _startFlashDelayed — superseded by Future.wait + seed key lock design)
 
-  // ── ReadAfterFlashData — mirrors .NET ReadAfterFlashData() ──
-  // .NET: GetSW → GetCalId → GetCVN → ecu_sr_no_after = ecu_sr_no (Jugaad)
   Future<void> _readAfterFlashData(TableInfoModel device) async {
     try {
-      // 🔥 FIX: Removed duplicate SW/CalID/CVN reads here.
-      // These are ALREADY read once in _postFlashLifecycle right before
-      // this is called. Reading them AGAIN doubled the socket/security-access
-      // load on each dongle (2x securityAccess + 2x CAN session setup per ECU)
-      // which was causing "Socket closed by dongle" / NORESPONSEFROMECU
-      // under the combined stress of both ECUs' post-flash reads running
-      // close together. Now we just finalize bookkeeping from values
-      // already populated by _postFlashLifecycle.
+      
       await Future.delayed(const Duration(milliseconds: 50));
 
       // .NET: ecu_sr_no_after = ecu_sr_no (Jugaad — no re-read)
@@ -1430,10 +1288,6 @@ class HomePageController extends GetxController {
     } finally { isLoading.value = false; }
   }
 
-  // ════════════════════════════════════════════════════════════
-  //  INDIVIDUAL FLASH (non-batch play button)
-  //  mirrors .NET StartIndivisualFlashingCommand
-  // ════════════════════════════════════════════════════════════
   Future<void> startIndividualFlash(TableInfoModel device) async {
     try {
       device.playButtonDisable = true; device.playButtonColor = _cGrey;
@@ -1466,10 +1320,6 @@ class HomePageController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════
-  //  POPUP HANDLERS — mirrors .NET OkCommand, ReflashCommand,
-  //  ForceFlashCommand, ChangeECUCommand
-  // ════════════════════════════════════════════════════════════
   void onOkPopup() {
     for (final item in tableInfo) {
       item.ecuStatus=true; item.ecuStatus1=''; item.alreadyMessage=false;
